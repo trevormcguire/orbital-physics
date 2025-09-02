@@ -1,9 +1,18 @@
+
+import os
+import shutil
+import tempfile
+import subprocess
+from typing import Optional
+
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import Literal, Optional
+from typing import Literal
+
+from core.engine import SimulationEngine
 
 def plot_orbits(
-    engine,
+    engine: SimulationEngine,
     every_n: int = 1,
     plane: Literal["xy", "xz", "yz"] = "xy",
     separate: bool = False,
@@ -129,3 +138,185 @@ def plot_orbits(
     if show:
         plt.show()
     return fig, axes
+
+
+def render_orbit_video_no_deps(
+    engine,
+    out_path: str = "orbits.mp4",
+    plane: str = "xy",
+    fps: int = 30,
+    duration_s: Optional[float] = None,
+    frame_every_n: int = 1,
+    separate: bool = False,
+    with_velocity: bool = False,
+    labels: bool = True,
+    show_barycenter: bool = True,
+    barycenter_trail: bool = True,
+    dpi: int = 150,
+    pad_frac: float = 0.08,
+    tmp_dir: Optional[str] = None,
+    cleanup: bool = True,
+    # If True, we override aspect AFTER plotting to avoid warnings/jitter
+    enforce_equal_aspect: bool = True,
+    every_n: int = 1
+):
+    """
+    Renders frames by repeatedly calling your existing `plot_orbits(engine_view, ...)`
+    and stitches them with system ffmpeg (no extra Python deps).
+    """
+    # ------------ choose frames ------------
+    uuids = list(engine.history.keys())
+    T_full = min(len(engine.history[u]) for u in uuids)
+
+    if duration_s is not None:
+        total_frames = max(1, int(round(fps * duration_s)))
+        stride = max(1, int(np.ceil(T_full / total_frames)))
+    else:
+        stride = max(1, int(frame_every_n))
+        total_frames = (T_full - 1) // stride
+
+    frame_indices = list(range(2, T_full + 1, stride))  # start at 2 so trails exist
+    if duration_s is not None and len(frame_indices) > total_frames:
+        frame_indices = frame_indices[:total_frames]
+
+    # ------------ global axis limits (steady camera) ------------
+    plane_idx = {"xy": (0, 1), "xz": (0, 2), "yz": (1, 2)}
+    if plane not in plane_idx:
+        raise ValueError("plane must be one of {'xy','xz','yz'}")
+    ix, iy = plane_idx[plane]
+
+    all_x, all_y = [], []
+    for u in uuids:
+        arr = np.asarray(engine.history[u])
+        all_x.append(arr[:, ix])
+        all_y.append(arr[:, iy])
+    all_x = np.concatenate(all_x)
+    all_y = np.concatenate(all_y)
+    x_min, x_max = float(all_x.min()), float(all_x.max())
+    y_min, y_max = float(all_y.min()), float(all_y.max())
+    dx, dy = (x_max - x_min), (y_max - y_min)
+    pad_x = pad_frac * (dx if dx > 0 else 1.0)
+    pad_y = pad_frac * (dy if dy > 0 else 1.0)
+    x_lim = (x_min - pad_x, x_max + pad_x)
+    y_lim = (y_min - pad_y, y_max + pad_y)
+
+    # ------------ temp frame dir ------------
+    made_tmp = False
+    if tmp_dir is None:
+        tmp_dir = tempfile.mkdtemp(prefix="orbit_frames_")
+        made_tmp = True
+    os.makedirs(tmp_dir, exist_ok=True)
+    pattern = os.path.join(tmp_dir, "frame_%06d.png")
+
+    # Lazy import to avoid circulars; adapt to where your plotter lives:
+    from core.plot import plot_orbits  # <-- change to your actual import
+
+    # Tiny inner “engine view” with truncated history (no `types` usage)
+    class EngineView:
+        def __init__(self, objects, history):
+            self.objects = objects
+            self.history = history
+
+    # ------------ render frames ------------
+    for f_idx, t_idx in enumerate(frame_indices):
+        eview = EngineView(
+            objects=engine.objects,
+            history={u: engine.history[u][:t_idx] for u in uuids},
+        )
+        # Avoid double aspect logic by passing equal_axes=False; we'll enforce below
+        fig, axes = plot_orbits(
+            eview,
+            every_n=every_n,
+            plane=plane,
+            separate=separate,
+            with_velocity=with_velocity,
+            equal_axes=False,        # <--- important to avoid warning spam
+            labels=labels,
+            last_k=None,
+            savepath=None,
+            show=False,
+            show_barycenter=show_barycenter,
+            barycenter_trail=barycenter_trail,
+        )
+
+        # lock camera & aspect (use adjustable='box' so limits are respected)
+        ax_list = axes if isinstance(axes, np.ndarray) else np.array([axes])
+        for ax in ax_list:
+            ax.set_xlim(*x_lim)
+            ax.set_ylim(*y_lim)
+            if enforce_equal_aspect:
+                ax.set_aspect("equal", adjustable="box")
+
+        # Save WITHOUT tight bounding, which often produces odd pixel widths
+        fig.savefig(pattern % f_idx, dpi=dpi, bbox_inches=None)
+        plt.close(fig)
+
+    # ------------ stitch with ffmpeg (pad to even dims) ------------
+    ffmpeg = shutil.which("ffmpeg")
+    ext = os.path.splitext(out_path)[1].lower()
+    ok = False
+    try:
+        if ffmpeg:
+            if ext not in {".mp4", ".mov", ".mkv", ".gif"}:
+                ext = ".mp4"
+                out_path = os.path.splitext(out_path)[0] + ext
+
+            if ext == ".gif":
+                # palette pass (GIF doesn't require even dims, but keep consistent)
+                palette = os.path.join(tmp_dir, "palette.png")
+                cmd1 = [
+                    ffmpeg, "-y", "-i", os.path.join(tmp_dir, "frame_%06d.png"),
+                    "-vf", "palettegen=stats_mode=single",
+                    palette
+                ]
+                cmd2 = [
+                    ffmpeg, "-y", "-framerate", str(fps),
+                    "-i", os.path.join(tmp_dir, "frame_%06d.png"),
+                    "-i", palette,
+                    "-lavfi", "paletteuse=dither=sierra2_4a",
+                    "-loop", "0",
+                    out_path
+                ]
+                subprocess.run(cmd1, check=True)
+                subprocess.run(cmd2, check=True)
+                ok = True
+            else:
+                # H.264 requires even dims; use pad (not scale) to preserve crispness
+                vf = "pad=ceil(iw/2)*2:ceil(ih/2)*2"
+                cmd = [
+                    ffmpeg, "-y",
+                    "-framerate", str(fps),
+                    "-i", os.path.join(tmp_dir, "frame_%06d.png"),
+                    "-vf", vf,
+                    "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p",
+                    out_path
+                ]
+                subprocess.run(cmd, check=True)
+                ok = True
+    except subprocess.CalledProcessError:
+        ok = False
+
+    info = {
+        "frames": len(frame_indices),
+        "fps": fps,
+        "path": out_path if ok else tmp_dir,
+        "duration_s": len(frame_indices) / fps,
+        "stitched": ok,
+        "ffmpeg": bool(ffmpeg),
+        "frame_dir": tmp_dir,
+    }
+
+    if ok and cleanup and made_tmp:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    if not ok:
+        print(
+            "\nFrames were written to:", tmp_dir,
+            "\nCouldn't stitch automatically (ffmpeg missing or failed).",
+            "\nTry this (pads to even dims):\n"
+            f'  ffmpeg -y -framerate {fps} -i "{os.path.join(tmp_dir, "frame_%06d.png")}" '
+            '-vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -c:v libx264 -pix_fmt yuv420p "orbits.mp4"\n'
+        )
+
+    return info

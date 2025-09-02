@@ -5,7 +5,7 @@ import numpy as np
 from core.constants import UnitSystem, get_unit_profile 
 from core.engine import SimulationEngine, run_simulation
 from core.physics import Coordinates, Object, ObjectCollection, set_circular_orbit
-from core.plot import plot_orbits
+from core.plot import plot_orbits, render_orbit_video_no_deps
 
 
 def two_body_problem(
@@ -159,13 +159,25 @@ def three_body_equilateral(
     engine = SimulationEngine(collection, dt=dt, softening=softening, restitution=1.0)
 
     run_simulation(engine, steps=steps, print_every=500)
-    plot_orbits(
+    # plot_orbits(
+    #     engine,
+    #     every_n=5,
+    #     plane="xy",
+    #     separate=False,
+    #     with_velocity=False,
+    #     show_barycenter=True,
+    #     barycenter_trail=True
+    # )
+    render_orbit_video_no_deps(
         engine,
-        every_n=5,
+        out_path="three_body_equilateral.mp4",
         plane="xy",
-        separate=False,
+        fps=30,
+        duration_s=30,
         with_velocity=False,
         show_barycenter=True,
-        barycenter_trail=True
+        barycenter_trail=True,
+        every_n=5
     )
+    
     return engine
