@@ -140,7 +140,7 @@ def plot_orbits(
     return fig, axes
 
 
-def render_orbit_video_no_deps(
+def render_orbital_mp4(
     engine,
     out_path: str = "orbits.mp4",
     plane: str = "xy",

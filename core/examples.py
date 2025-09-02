@@ -5,7 +5,7 @@ import numpy as np
 from core.constants import UnitSystem, get_unit_profile 
 from core.engine import SimulationEngine, run_simulation
 from core.physics import Coordinates, Object, ObjectCollection, set_circular_orbit
-from core.plot import plot_orbits, render_orbit_video_no_deps
+from core.plot import plot_orbits, render_orbital_mp4
 
 
 def two_body_problem(
@@ -51,7 +51,7 @@ def two_body_problem(
 
 def sun_earth_moon(
     steps: int = 5000,
-    dt: float = 900.0,              # 15 min; smaller dt = better Moon fidelity
+    dt: float = 3600.,              # 15 min; smaller dt = better Moon fidelity
     moon_incl_deg: float = 0.0,     # set to ~5.1 for realism
     softening: float = 1e3,
     unit_profile: UnitSystem = "si"
@@ -59,24 +59,27 @@ def sun_earth_moon(
     """ Simulate the Earth-Moon system orbiting the Sun."""
     unit_profile = get_unit_profile(unit_profile)
     # --- constants ---
-    M_sun,  R_sun  = 1.98847e30, 6.9634e8
-    M_earth,R_earth = 5.972e24, 6.371e6
+    M_sun, R_sun = 1.98847e30, 6.9634e8
+    M_earth, R_earth = 5.972e24, 6.371e6
     M_moon, R_moon = 7.348e22, 1.737e6
     AU = 1.495978707e11
     R_em = 384400e3
 
     # --- bodies ---
-    sun   = Object(M_sun,   R_sun,   velocity=np.zeros(3), coordinates=Coordinates(0, 0, 0))
+    sun   = Object(M_sun, R_sun, velocity=np.zeros(3), coordinates=Coordinates(0, 0, 0))
     earth = Object(M_earth, R_earth, velocity=np.zeros(3), coordinates=Coordinates(AU, 0, 0))
 
     # Place Moon offset from Earth (choose x-offset; we'll set velocity ⟂ to radius)
     moon_pos = np.array([AU + R_em, 0.0, 0.0])
-    if abs(moon_incl_deg) > 0:
-        # rotate offset around x-axis to give inclination
+    if abs(moon_incl_deg) > 0:  # rotate offset around x-axis to give inclination
         i = np.deg2rad(moon_incl_deg)
         moon_pos = np.array([AU + R_em, 0.0, R_em*np.sin(i)])  # simple tilt
-    moon  = Object(M_moon, R_moon, velocity=np.zeros(3),
-                   coordinates=Coordinates.from_iterable(moon_pos))
+    moon = Object(
+        M_moon,
+        R_moon,
+        velocity=np.zeros(3),
+        coordinates=Coordinates.from_iterable(moon_pos)
+    )
 
     # 1) Make Sun–Earth circular about their barycenter
     set_circular_orbit(sun, earth)          # total momentum of Sun+Earth = 0
@@ -98,8 +101,8 @@ def sun_earth_moon(
     v_rel = np.sqrt(unit_profile.G * (M_earth + M_moon) / R) * t_hat   # circular EM speed
 
     # Split so EM barycenter moves with v_cm (keeps Sun–(Earth+Moon) circular)
-    earth.velocity = v_cm - (M_moon/(M_earth+M_moon)) * v_rel
-    moon.velocity  = v_cm + (M_earth/(M_earth+M_moon)) * v_rel
+    earth.velocity = v_cm - (M_moon / (M_earth + M_moon)) * v_rel
+    moon.velocity  = v_cm + (M_earth / (M_earth + M_moon)) * v_rel
 
     # --- simulate ---
     collection = ObjectCollection([sun, earth, moon])
@@ -169,7 +172,7 @@ def three_body_equilateral(
     #     show_barycenter=True,
     #     barycenter_trail=True
     # )
-    render_orbit_video_no_deps(
+    render_orbital_mp4(
         engine,
         out_path=out_path,
         plane="xy",
