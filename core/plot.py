@@ -208,9 +208,6 @@ def render_orbit_video_no_deps(
     os.makedirs(tmp_dir, exist_ok=True)
     pattern = os.path.join(tmp_dir, "frame_%06d.png")
 
-    # Lazy import to avoid circulars; adapt to where your plotter lives:
-    from core.plot import plot_orbits  # <-- change to your actual import
-
     # Tiny inner “engine view” with truncated history (no `types` usage)
     class EngineView:
         def __init__(self, objects, history):

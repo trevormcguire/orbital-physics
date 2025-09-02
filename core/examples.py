@@ -124,7 +124,8 @@ def three_body_equilateral(
     dt: float = 50.0,
     steps: int = 8000,
     softening: float = 1e3,
-    unit_profile: UnitSystem = "si"
+    unit_profile: UnitSystem = "si",
+    out_path: str = "three_body_equilateral.mp4"
 ):
     """Three equal-mass bodies in an equilateral triangle, with velocities for rigid rotation.
     Note as steps increases, the system becomes chaotic and eventually breaks symmetry.
@@ -170,7 +171,7 @@ def three_body_equilateral(
     # )
     render_orbit_video_no_deps(
         engine,
-        out_path="three_body_equilateral.mp4",
+        out_path=out_path,
         plane="xy",
         fps=30,
         duration_s=30,
