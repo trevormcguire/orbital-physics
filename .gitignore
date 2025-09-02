@@ -1,5 +1,10 @@
 .venv/
-.__pycache__/
+__pycache__/
+*.py[cod]
 .DS_Store
 .ipynb_checkpoints/
 .vscode/
+build/
+dist/
+*.egg-info/
+.env

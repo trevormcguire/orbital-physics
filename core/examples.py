@@ -60,10 +60,10 @@ def sun_earth_moon(
     unit_profile = get_unit_profile(unit_profile)
     # --- constants ---
     M_sun,  R_sun  = 1.98847e30, 6.9634e8
-    M_earth,R_earth= 5.972e24,   6.371e6
-    M_moon, R_moon = 7.348e22,   1.737e6
-    AU      = 1.495978707e11
-    R_em    = 384400e3
+    M_earth,R_earth = 5.972e24, 6.371e6
+    M_moon, R_moon = 7.348e22, 1.737e6
+    AU = 1.495978707e11
+    R_em = 384400e3
 
     # --- bodies ---
     sun   = Object(M_sun,   R_sun,   velocity=np.zeros(3), coordinates=Coordinates(0, 0, 0))
@@ -106,8 +106,15 @@ def sun_earth_moon(
     engine = SimulationEngine(collection, dt=dt, softening=softening, restitution=1.0)
 
     run_simulation(engine, steps=steps, print_every=500)
-    plot_orbits(engine, every_n=10, plane="xy", separate=False,
-                with_velocity=False, show_barycenter=True, barycenter_trail=True)
+    plot_orbits(
+        engine,
+        every_n=10,
+        plane="xy",
+        separate=False,
+        with_velocity=False,
+        show_barycenter=True,
+        barycenter_trail=True
+    )
     return engine
 
 
@@ -119,6 +126,10 @@ def three_body_equilateral(
     softening: float = 1e3,
     unit_profile: UnitSystem = "si"
 ):
+    """Three equal-mass bodies in an equilateral triangle, with velocities for rigid rotation.
+    Note as steps increases, the system becomes chaotic and eventually breaks symmetry.
+    This is the classic Lagrange solution to the 3-body problem.
+    """
     unit_profile = get_unit_profile(unit_profile)
     # Vertex positions (counterclockwise) at distance R from origin
     pos = [
@@ -148,6 +159,13 @@ def three_body_equilateral(
     engine = SimulationEngine(collection, dt=dt, softening=softening, restitution=1.0)
 
     run_simulation(engine, steps=steps, print_every=500)
-    plot_orbits(engine, every_n=5, plane="xy", separate=False,
-                with_velocity=False, show_barycenter=True, barycenter_trail=True)
+    plot_orbits(
+        engine,
+        every_n=5,
+        plane="xy",
+        separate=False,
+        with_velocity=False,
+        show_barycenter=True,
+        barycenter_trail=True
+    )
     return engine

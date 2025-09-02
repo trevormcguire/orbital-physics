@@ -100,13 +100,16 @@ def plot_orbits(
                 linewidth=1.0
             )
 
-        ax.set_xlabel(plane[0]); ax.set_ylabel(plane[1]); ax.grid(True, alpha=0.2)
+        ax.set_xlabel(plane[0])
+        ax.set_ylabel(plane[1])
+        ax.grid(True, alpha=0.2)
         if equal_axes:
             ax.set_aspect("equal", adjustable="datalim")
 
     # --- barycenter annotation (on all axes) ---
     if show_barycenter and Rcm.shape[0] > 0:
-        bx = Rcm[:, ix]; by = Rcm[:, iy]
+        bx = Rcm[:, ix]
+        by = Rcm[:, iy]
         for ax in axes:
             if barycenter_trail and len(bx) > 1:
                 ax.plot(bx, by, linestyle="--", linewidth=1.2, alpha=0.7, label=("barycenter trail" if labels else None))

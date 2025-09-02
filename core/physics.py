@@ -338,23 +338,27 @@ def collide_spheres(obj1: Object, obj2: Object, restitution: float = 1.0):
         return
     n /= dist
 
-    v1, v2 = obj1.velocity, obj2.velocity
     m1, m2 = obj1.mass, obj2.mass
-    v_rel = np.dot(v1 - v2, n)
+    v_rel = np.dot(obj1.velocity - obj2.velocity, n)
     if v_rel >= 0:
         return  # separating
 
     # 1D impulse along normal with restitution e
+    # Coefficient of restitution e in [0,1]; impulse magnitude for 1D along n:
+    # j = -(1+e) * v_rel / (1 / m1 + 1 / m2)
+    m1_inv = 1. / m1
+    m2_inv = 1. / m2
     e = float(np.clip(restitution, 0.0, 1.0))
-    j = -(1 + e) * v_rel / (1/m1 + 1/m2)
+
+    j = -(1 + e) * v_rel / (m1_inv + m2_inv)
     impulse = j * n
-    obj1.velocity = v1 + impulse / m1
-    obj2.velocity = v2 - impulse / m2
+    obj1.velocity += impulse / m1
+    obj2.velocity -= impulse / m2
 
     # Positional correction: push out of overlap proportionally to masses
     overlap = obj1.radius + obj2.radius - dist
     if overlap > 0:
-        corr = overlap / (1/m1 + 1/m2)
+        corr = overlap / (m1_inv + m2_inv)
         obj1.coordinates = Coordinates.from_iterable(r1 + n * (corr / m1))
         obj2.coordinates = Coordinates.from_iterable(r2 - n * (corr / m2))
 
@@ -369,17 +373,19 @@ def set_circular_orbit(primary: Object, secondary: Object, plane_normal=np.array
     if R == 0:
         raise ValueError("Bodies at same position.")
 
-    # direction perpendicular to both r and plane normal
+    # # Tangential direction t is perpendicular to radius vector in the chosen plane.
     t = np.cross(plane_normal / np.linalg.norm(plane_normal), r / R)
     if np.linalg.norm(t) < 1e-12:
         # Choose another plane if degenerate
         t = np.cross(np.array([0., 1., 0.]), r / R)
     t /= np.linalg.norm(t)
 
-    M = primary.mass + secondary.mass
-    v_mag = np.sqrt(unit_profile.G * M / R)  # circular speed for reduced two-body about barycenter
+
+    # Circular orbital speed for reduced two-body about barycenter:
+    v_mag = np.sqrt(unit_profile.G * (primary.mass + secondary.mass) / R)
     v2 = v_mag * t
-    v1 = -(secondary.mass / primary.mass) * v2  # zero total momentum
+    # Ensure zero total linear momentum: v1 = -(m2 / m1) * v2
+    v1 = -(secondary.mass / primary.mass) * v2
 
     primary.velocity = v1
     secondary.velocity = v2
