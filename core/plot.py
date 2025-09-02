@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from typing import Literal
 
 from core.engine import SimulationEngine
+from core.physics import Object
 
 def plot_orbits(
     engine: SimulationEngine,
@@ -80,8 +81,8 @@ def plot_orbits(
         fig, ax = plt.subplots(figsize=(8, 8))
         axes = np.array([ax])
 
-    def label_for(o):
-        return f"{o.uuid[:6]} (m={o.mass:.2e})"
+    def label_for(o: Object):
+        return f"{o.name} (m={o.mass:.2e})"
 
     # --- plotting ---
     for obj, ax in zip(objs, (axes if separate else [axes[0]] * len(objs))):

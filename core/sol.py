@@ -41,7 +41,7 @@ RADIUS = {
     "Earth":   6.3710e6,
     "Mars":    3.3895e6,
     "Jupiter": 6.9911e7,
-    "Saturn":  5.8232e7,  # mean
+    "Saturn":  5.8232e7,
     "Uranus":  2.5362e7,
     "Neptune": 2.4622e7,
 }
@@ -162,9 +162,8 @@ def jpl_elements_at(name: str, jd: float) -> Elements:
     w = (varpi - O) % (2*math.pi)
     return Elements(a=a_AU * AU, e=e, i=i, Omega=O, omega=w, M=M)
 
-# ------------------------------- moons ----------------------------------------
-
 # Major moons: (mass kg, radius m, semi-major-axis m, period s, e≈, i≈deg)
+# https://ssd.jpl.nasa.gov/sats/elem/sep.html
 MOONS = {
     "Earth": [
         # Moon (more realistic e & i so you get precession-looking shape)
@@ -225,8 +224,11 @@ def make_planet_objects(jd: Optional[float] = None) -> List[Object]:
     """Sun + eight planets placed heliocentrically at JD."""
     jd = J2000_JD if jd is None else jd
     sun = Object(
-        mass=MASS["Sun"], radius=RADIUS["Sun"],
-        velocity=np.zeros(3), coordinates=Coordinates(0.0, 0.0, 0.0)
+        mass=MASS["Sun"],
+        radius=RADIUS["Sun"],
+        velocity=np.zeros(3),
+        coordinates=Coordinates(0.0, 0.0, 0.0),
+        name="Sol"
     )
     bodies = [sun]
 
@@ -240,6 +242,7 @@ def make_planet_objects(jd: Optional[float] = None) -> List[Object]:
                 radius=RADIUS[name],
                 velocity=v.astype(np.float64),
                 coordinates=Coordinates(*r.tolist()),
+                name=name
             )
         )
     return bodies
@@ -338,7 +341,7 @@ def make_solar_system(
     return bodies
 
 
-def main(moons: bool = True, days: int = 365):
+def main(moons: bool = True, days: int = 365, out_path: str = "sol.mp4"):
     # Example: build at J2000, run a quick sim
     from core.engine import SimulationEngine, run_simulation
     from core.plot import render_orbital_mp4
@@ -351,7 +354,7 @@ def main(moons: bool = True, days: int = 365):
     run_simulation(engine, steps=days, print_every=100)
     render_orbital_mp4(
         engine,
-        out_path="sol.mp4",
+        out_path=out_path,
         plane="xy",
         fps=30,
         duration_s=30,

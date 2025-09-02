@@ -144,6 +144,7 @@ class Object:
         angular_velocity: np.ndarray = None,
         uuid: str = None,
         unit_profile: UnitProfile = STANDARD,
+        name: str = None
     ):
         self.mass = mass
         self.radius = radius
@@ -154,8 +155,8 @@ class Object:
         # angular velocity vector (rad/s): a vector representing the axis and rate of rotation (radians per second).
         self.angular_velocity = angular_velocity.astype(np.float32) if angular_velocity is not None else random_angular_velocity().astype(np.float32)
         self.uuid = uuid if uuid else uuid4().hex
+        self.name = name if name is not None else self.uuid[:6]
         self.unit_profile = unit_profile
-    
 
     def to_dict(self):
         return {
