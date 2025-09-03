@@ -185,3 +185,87 @@ def three_body_equilateral(
     )
     
     return engine
+
+
+def sol_from_kepler_dataset(
+    out_path: str = "sol_from_keplerian.mp4",
+    days: int = 365,
+    dt: float = None,
+    include_sun: bool = True,
+    print_every: int = 100,
+):
+    """Build Sun+planets from core.datasets keplerian table and render a video."""
+    import math
+    import numpy as np
+
+    from core.datasets import solar_keplerian_elements
+    from core.sol import OrbitalElements, elements_to_state, G, DAY, MASS, RADIUS
+    from core.physics import Object, Coordinates, ObjectCollection
+    from core.engine import SimulationEngine, run_simulation
+    from core.plot import render_orbital_mp4
+
+    # get dataset and convert to meters/radians (Dataset defaults do this)
+    ds = solar_keplerian_elements().convert_types()
+    rows = ds.values()  # list[dict] with numeric 'a' (m), angles (rad)
+
+    # choose timestep
+    dt = DAY if dt is None else dt
+    mu_sun = G * MASS["Sun"]
+
+    bodies = []
+    if include_sun:
+        sun = Object(
+            mass=MASS["Sun"],
+            radius=RADIUS["Sun"],
+            velocity=np.zeros(3),
+            coordinates=Coordinates(0.0, 0.0, 0.0),
+            name="Sol"
+        )
+        bodies.append(sun)
+
+    for rec in rows:
+        name = rec.get("name")
+        a = float(rec["a"])
+        e = float(rec["e"])
+        I = float(rec["I"])
+        L = float(rec["L"])
+        varpi = float(rec["long.peri"])
+        O = float(rec["long.node"])
+
+        # Compute mean anomaly and argument of periapsis consistent with core/sol.jpl logic
+        M = (L - varpi) % (2 * math.pi)
+        omega = (varpi - O) % (2 * math.pi)
+
+        el = OrbitalElements(a=a, e=e, i=I, Omega=O, omega=omega, M=M)
+        r, v = elements_to_state(mu_sun, el)
+
+        mass = MASS.get(name, MASS.get("Earth", 1.0))
+        radius = RADIUS.get(name, RADIUS.get("Earth", 1.0))
+
+        bodies.append(
+            Object(
+                mass=mass,
+                radius=radius,
+                velocity=v.astype(np.float64),
+                coordinates=Coordinates(*r.tolist()),
+                name=name
+            )
+        )
+
+    collection = ObjectCollection(bodies)
+    engine = SimulationEngine(collection, dt=dt, softening=1e6, restitution=1.0)
+
+    # run and render
+    run_simulation(engine, steps=days, print_every=print_every)
+    render_orbital_mp4(
+        engine,
+        out_path=out_path,
+        plane="xy",
+        fps=30,
+        duration_s=30,
+        with_velocity=False,
+        show_barycenter=True,
+        barycenter_trail=True,
+        every_n=5
+    )
+    return engine

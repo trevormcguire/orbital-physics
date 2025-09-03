@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import math
 
+AU_METERS = 1.495978707e11  # num meters in 1AU
+KG_SOLAR = 1.98847e30  # num kg in 1 solar mass
+
+
 class Unit:
     def __init__(self, value: float | int, unit: str):
         self.value = float(value)
@@ -29,20 +33,41 @@ class Meters(Unit):
         super().__init__(value, "meters")
     
     def to_au(self) -> float:
-        return AU(self.value / 1.495978707e11)
+        return AU(self.value / AU_METERS)
 
 class AU(Unit):
     def __init__(self, value: float | int):
         super().__init__(value, "au")
     
     def to_meters(self) -> float:
-        return Meters(self.value * 1.495978707e11)
+        return Meters(self.value * AU_METERS)
 
+class Kilograms(Unit):
+    def __init__(self, value: float | int):
+        super().__init__(value, "kilograms")
+    
+    def to_solar_masses(self) -> float:
+        return SolarMasses(self.value / KG_SOLAR)
+
+class SolarMasses(Unit):
+    def __init__(self, value: float | int):
+        super().__init__(value, "m_solar")
+    
+    def to_kilograms(self) -> float:
+        return Kilograms(self.value * KG_SOLAR)
+    
 
 class Dataset(object):
-    def __init__(self, data: list[dict], distance_unit: str = "meters", angle_unit: str = "radians"):
+    def __init__(
+        self,
+        data: list[dict],
+        distance_unit: str = "meters",
+        mass_unit: str = "kg",
+        angle_unit: str = "radians"
+    ):
         self.data = data
         self.distance_unit = distance_unit
+        self.mass_unit = mass_unit
         self.angle_unit = angle_unit
 
     def _convert(self, value):
@@ -56,6 +81,10 @@ class Dataset(object):
             return value.to_degrees()
         if isinstance(value, Degrees) and self.angle_unit == "radians":
             return value.to_radians()
+        if isinstance(value, Kilograms) and self.mass_unit == "m_solar":
+            return value.to_solar_masses()
+        if isinstance(value, SolarMasses) and self.mass_unit == "kilograms":
+            return value.to_kilograms()
         return value
 
     def convert_types(self) -> Dataset:
@@ -97,4 +126,22 @@ def solar_keplerian_elements():
         {"name": "Pluto", **_make_keplerian_element(39.5886, 0.2518, 17.1477, 38.68366, 113.709, 110.292)},
         # https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=Eris
         {"name": "Eris", **_make_keplerian_element(68.0506, 0.435675, 43.821, 211.032, 150.714, 36.0460)}
+    ])
+
+
+# Source: NASA/JPL https://ssd.jpl.nasa.gov/planets/phys_par.html
+def solar_physical_properties():
+    return Dataset([
+        {"name": "Sun", "mass": Kilograms(1.9885e30), "radius": Meters(6.9634e8), "fg": 274.},
+        {"name": "Mercury", "mass": Kilograms(3.3011e23), "radius": Meters(2.4397e6), "fg": 3.70},
+        {"name": "Venus", "mass": Kilograms(4.8675e24), "radius": Meters(6.0518e6), "fg": 8.87},
+        {"name": "Earth", "mass": Kilograms(5.9722e24), "radius": Meters(6.3710e6), "fg": 9.80},
+        {"name": "Mars", "mass": Kilograms(6.4171e23), "radius": Meters(3.3895e6), "fg": 3.71},
+        {"name": "Jupiter", "mass": Kilograms(1.8982e27), "radius": Meters(6.9911e7), "fg": 24.79},
+        {"name": "Saturn", "mass": Kilograms(5.6834e26), "radius": Meters(5.8232e7), "fg": 10.44},
+        {"name": "Uranus", "mass": Kilograms(8.6810e25), "radius": Meters(2.5362e7), "fg": 8.87},
+        {"name": "Neptune", "mass": Kilograms(1.02413e26), "radius": Meters(2.4622e7), "fg": 11.15},
+        {"name": "Pluto", "mass": Kilograms(13024.6e18), "radius": Meters(1188.3e4), "fg": 0.62},
+        {"name": "Ceres", "mass": Kilograms(938.416e18), "radius": Meters(469.7e4), "fg": 0.27},
+        {"name": "Eris", "mass": Kilograms(16600e18), "radius": Meters(1200.0e4), "fg": 0.77},
     ])
