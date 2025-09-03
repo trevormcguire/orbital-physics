@@ -69,6 +69,18 @@ class Dataset(object):
         self.distance_unit = distance_unit
         self.mass_unit = mass_unit
         self.angle_unit = angle_unit
+    
+    def set_distance_unit(self, unit: str):
+        assert unit in ("meters", "au"), "Distance unit must be 'meters' or 'au'"
+        self.distance_unit = unit
+
+    def set_mass_unit(self, unit: str):
+        assert unit in ("kilograms", "m_solar"), "Mass unit must be 'kilograms' or 'm_solar'"
+        self.mass_unit = unit
+
+    def set_angle_unit(self, unit: str):
+        assert unit in ("radians", "degrees"), "Angle unit must be 'radians' or 'degrees'"
+        self.angle_unit = unit
 
     def _convert(self, value):
         if not isinstance(value, Unit):
@@ -87,11 +99,15 @@ class Dataset(object):
             return value.to_kilograms()
         return value
 
-    def convert_types(self) -> Dataset:
+    def convert_types(self, distance_unit: str = None, mass_unit: str = None, angle_unit: str = None) -> Dataset:
+        distance_unit = distance_unit or self.distance_unit
+        mass_unit = mass_unit or self.mass_unit
+        angle_unit = angle_unit or self.angle_unit
+    
         standardized_data = []
         for row in self.data:
             standardized_data.append({k: self._convert(v) for k, v in row.items()})
-        return Dataset(standardized_data, self.distance_unit, self.angle_unit)
+        return Dataset(standardized_data, distance_unit=distance_unit, mass_unit=mass_unit, angle_unit=angle_unit)
 
     def values(self):
         return [{k: v.value if isinstance(v, Unit) else v for k, v in row.items()} for row in self.data]

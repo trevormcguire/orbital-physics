@@ -198,7 +198,7 @@ def sol_from_kepler_dataset(
     import math
     import numpy as np
 
-    from core.datasets import solar_keplerian_elements
+    from core.datasets import solar_keplerian_elements, solar_physical_properties
     from core.sol import OrbitalElements, elements_to_state, G, DAY, MASS, RADIUS
     from core.physics import Object, Coordinates, ObjectCollection
     from core.engine import SimulationEngine, run_simulation
@@ -208,15 +208,20 @@ def sol_from_kepler_dataset(
     ds = solar_keplerian_elements().convert_types()
     rows = ds.values()  # list[dict] with numeric 'a' (m), angles (rad)
 
+    phys = solar_physical_properties().convert_types(mass_unit="kilograms", distance_unit="meters").values()
+    phys = {row["name"].lower(): row for row in phys}
+
     # choose timestep
     dt = DAY if dt is None else dt
-    mu_sun = G * MASS["Sun"]
+    mu_sun = G * phys["sun"]["mass"]
+    default_mass = phys["earth"]["mass"]
+    default_radius = phys["earth"]["radius"]
 
     bodies = []
     if include_sun:
         sun = Object(
-            mass=MASS["Sun"],
-            radius=RADIUS["Sun"],
+            mass=phys["sun"]["mass"],
+            radius=phys["sun"]["radius"],
             velocity=np.zeros(3),
             coordinates=Coordinates(0.0, 0.0, 0.0),
             name="Sol"
@@ -239,8 +244,10 @@ def sol_from_kepler_dataset(
         el = OrbitalElements(a=a, e=e, i=I, Omega=O, omega=omega, M=M)
         r, v = elements_to_state(mu_sun, el)
 
-        mass = MASS.get(name, MASS.get("Earth", 1.0))
-        radius = RADIUS.get(name, RADIUS.get("Earth", 1.0))
+        # mass = MASS.get(name, MASS.get("Earth", 1.0))
+        # radius = RADIUS.get(name, RADIUS.get("Earth", 1.0))
+        mass = phys[name.lower()]["mass"] if name.lower() in phys else default_mass
+        radius = phys[name.lower()]["radius"] if name.lower() in phys else default_radius
 
         bodies.append(
             Object(
