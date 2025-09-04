@@ -12,6 +12,17 @@ class Unit:
     
     def __repr__(self):
         return f"{self.unit.upper()}({self.value})"
+    
+    def __sub__(self, other):
+        if self.unit != other.unit:
+            raise ValueError(f"Cannot subtract objects of different types.")
+        return self.__class__(self.value - other.value)
+
+    def __add__(self, other):
+        if self.unit != other.unit:
+            raise ValueError(f"Cannot add objects of different types.")
+        return self.__class__(self.value + other.value)
+
 
 class Radians(Unit):
     def __init__(self, value: float | int):
@@ -53,6 +64,6 @@ class Kilograms(Unit):
 class SolarMasses(Unit):
     def __init__(self, value: float | int):
         super().__init__(value, "m_solar")
-    
+
     def to_kilograms(self) -> float:
         return Kilograms(self.value * KG_SOLAR)

@@ -11,6 +11,7 @@ from core.datasets import solar_keplerian_elements, solar_physical_properties
 from core.engine import SimulationEngine, run_simulation
 from core.sol import OrbitalElements, elements_to_state, G, DAY
 from core.physics import Object, Coordinates, ObjectCollection
+from core.units import Unit
 
 
 def generate_engine(
@@ -29,8 +30,8 @@ def generate_engine(
     # choose timestep
     dt = DAY if dt is None else dt
     mu_sun = G * phys["sun"]["mass"]
-    default_mass = phys["earth"]["mass"]
-    default_radius = phys["earth"]["radius"]
+    # default_mass = phys["earth"]["mass"]
+    # default_radius = phys["earth"]["radius"]
 
     bodies = []
     if include_sun:
@@ -48,7 +49,7 @@ def generate_engine(
         a = float(rec["a"])
         e = float(rec["e"])
         I = float(rec["I"])
-        L = float(rec["L"])  # mean longitude (defined as L = Ω + ω + M , or L = ϖ + M)
+        L = float(rec["L"])  # mean longitude (defined as L = ϖ + M, where ϖ = Ω + ω, so L = Ω + ω + M)
         varpi = float(rec["long.peri"])  # longitude of periapsis (closest point, defied as ϖ = Ω + ω)
         O = float(rec["long.node"])  # longitude of ascending node (defied as Ω)
 
@@ -60,8 +61,8 @@ def generate_engine(
         # radius (dist from foci), velocity in inertial frame
         r, v = elements_to_state(mu_sun, el)
 
-        mass = phys[name.lower()]["mass"] if name.lower() in phys else default_mass
-        radius = phys[name.lower()]["radius"] if name.lower() in phys else default_radius
+        mass = phys[name.lower()]["mass"] # if name.lower() in phys else default_mass
+        radius = phys[name.lower()]["radius"] # if name.lower() in phys else default_radius
 
         bodies.append(
             Object(
@@ -78,13 +79,60 @@ def generate_engine(
 
     return engine
 
+def generate_engine_v2(
+    dt: float,
+    include_sun: bool = True,
+):
+    from core.datasets import solar_system, G
+
+    data = solar_system().convert_types(
+        mass_unit="kilograms",
+        distance_unit="meters",
+        angle_unit="radians"
+    )
+
+    sol: dict[str, Unit] = data.pop("Sol")
+    mu_sun = G * sol["mass"].value
+    bodies = []
+    if include_sun:
+        sun = Object(
+            mass=sol["mass"].value,
+            radius=sol["radius"].value,
+            velocity=np.zeros(3),
+            coordinates=Coordinates(0.0, 0.0, 0.0),
+            name="Sol"
+        )
+        bodies.append(sun)
+    for body in data.data:
+        el = OrbitalElements(
+            a=float(body["a"].value),
+            e=float(body["e"]),
+            i=float(body["I"].value),
+            Omega=float(body["long.node"].value),
+            omega=float(body["arg.peri"].value),
+            M=float(body["M"].value)
+        )
+        # radius (dist from foci), velocity in inertial frame
+        r, v = elements_to_state(mu_sun, el)
+        bodies.append(
+            Object(
+                mass=body["mass"].value,
+                radius=body["radius"].value,
+                velocity=v.astype(np.float64),
+                coordinates=Coordinates(*r.tolist()),
+                name=body["name"]
+            )
+        )
+    collection = ObjectCollection(bodies)
+    return SimulationEngine(collection, dt=dt, softening=1e6, restitution=1.0)
 
 
 INTERVAL = 3600.  # 1 hour
 INITIAL_STEPS = 5000  # hours to warm up with
 # 1-hour timestep; softening to avoid singularities if needed
 # engine = SimulationEngine(objects=collection, dt=3600.0, softening=1e6, restitution=1.0)
-engine = generate_engine(dt=INTERVAL, include_sun=True)  # each frame is 1 hour
+# engine = generate_engine(dt=INTERVAL, include_sun=True)  # each frame is 1 hour
+engine = generate_engine_v2(dt=INTERVAL, include_sun=True)  # each frame is 1 hour
 # start with some history
 print("Warming up simulation...")
 run_simulation(engine, steps=INITIAL_STEPS, print_every=100)  # 1 month of history
@@ -94,7 +142,7 @@ app = Flask(__name__)
 
 AU_METERS = 1.495978707e11
 WORLD_SCALE = 1.0 / AU_METERS  # world units == AU
-
+# WORLD_SCALE = 1.
 STOP_SIMULATION = False
 SIM_FPS = 10.0  # tick rate of the engine loop (wall clock)
 def engine_loop():
@@ -153,11 +201,7 @@ def index():
     for name, pts in raw_hist.items():
         converted = []
         for p in pts:
-            # p may be list/tuple or object with x/y/z
-            if isinstance(p, (list, tuple)) and len(p) >= 3:
-                x, y, z = p[0], p[1], p[2]
-            else:
-                x, y, z = p.x, p.y, p.z  # fallback if object
+            x, y, z = p[0], p[1], p[2]
             converted.append([x * WORLD_SCALE, y * WORLD_SCALE, z * WORLD_SCALE])
         world_hist[name] = converted
     return render_template("index.html", initial_state=world_hist, bodies=get_bodies())
@@ -175,38 +219,53 @@ def api_state():
       - position (x,y,z) in WORLD units (AU here)
     Also returns mass/radius min/max for color/size scaling.
     """
-    bodies = []
-    masses = []
-    radii_km = []
+    return jsonify(get_bodies())
 
-    for obj in engine.objects:
-        pos_m = obj.position()               # meters
-        pos_world = (pos_m * WORLD_SCALE)    # AU for the viewer
-        r_km = float(obj.radius) / 1000.0
+# @app.route("/api/state")
+# def api_state():
+#     """
+#     Exposes current positions & properties for all objects.
 
-        bodies.append({
-            "id": obj.uuid,
-            "name": obj.name,
-            "mass_kg": float(obj.mass),
-            "radius_km": r_km,
-            "position": {
-                "x": float(pos_world[0]),
-                "y": float(pos_world[1]),
-                "z": float(pos_world[2]),
-            }
-        })
-        masses.append(float(obj.mass))
-        radii_km.append(r_km)
+#     Output fields:
+#       - id: object uuid
+#       - name
+#       - mass_kg
+#       - radius_km  (converted from meters)
+#       - position (x,y,z) in WORLD units (AU here)
+#     Also returns mass/radius min/max for color/size scaling.
+#     """
+#     bodies = []
+#     masses = []
+#     radii_km = []
 
-    if not masses:
-        masses = [1.0]
-    if not radii_km:
-        radii_km = [1.0]
+#     for obj in engine.objects:
+#         pos_m = obj.position()               # meters
+#         pos_world = (pos_m * WORLD_SCALE)    # AU for the viewer
+#         r_km = float(obj.radius) / 1000.0
 
-    return jsonify({
-        "bodies": bodies,
-        "mass_min": min(masses),
-        "mass_max": max(masses),
-        "radius_min": min(radii_km),
-        "radius_max": max(radii_km),
-    })
+#         bodies.append({
+#             "id": obj.uuid,
+#             "name": obj.name,
+#             "mass_kg": float(obj.mass),
+#             "radius_km": r_km,
+#             "position": {
+#                 "x": float(pos_world[0]),
+#                 "y": float(pos_world[1]),
+#                 "z": float(pos_world[2]),
+#             }
+#         })
+#         masses.append(float(obj.mass))
+#         radii_km.append(r_km)
+
+#     if not masses:
+#         masses = [1.0]
+#     if not radii_km:
+#         radii_km = [1.0]
+
+#     return jsonify({
+#         "bodies": bodies,
+#         "mass_min": min(masses),
+#         "mass_max": max(masses),
+#         "radius_min": min(radii_km),
+#         "radius_max": max(radii_km),
+#     })

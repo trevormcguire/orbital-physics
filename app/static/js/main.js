@@ -24,6 +24,8 @@ const FLASH_INTERVAL_MS = FLASH_DURATION_MS / 5;
 
 const API_POLL_MS = 1000;
 const TRAIL_MAX = 1000;
+// const AU_METERS = 1.495978707e11;
+// const BACKEND_SENDS_AU = true;
 
 /* ----- Focus Zoom Tuning ----- */
 const ENABLE_FOCUS_ZOOM = true;
