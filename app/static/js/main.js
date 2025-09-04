@@ -424,11 +424,24 @@ function frameIfNeeded(data) {
 }
 
 /* ------------------------ Data ------------------------ */
+function updateSimTimeFromPayload(payload) {
+  const el = document.getElementById("simTime");
+  if (!el) return;
+  if (payload?.sim_time_iso) {
+    // show ISO and JD (rounded)
+    const jd = payload.sim_time_jd ? ` (JD ${payload.sim_time_jd.toFixed(5)})` : "";
+    el.textContent = `epoch: ${payload.sim_time_iso}${jd}`;
+  } else if (payload?.time_elapsed != null) {
+    const days = (payload.time_elapsed / 86400).toFixed(2);
+    el.textContent = `time elapsed: ${days} d`;
+  }
+}
+
 async function fetchState() {
   const res = await fetch("/api/state", { cache: "no-store" });
   if (!res.ok) return;
   const data = await res.json();
-
+  updateSimTimeFromPayload(data);
   frameIfNeeded(data);
 
   for (const b of data.bodies) {
@@ -458,7 +471,7 @@ async function fetchState() {
 function bootstrapInitial() {
   const boot = window.__BOOTSTRAP__;
   if (!boot || !boot.snapshot || !boot.snapshot.bodies) return;
-
+  updateSimTimeFromPayload(boot.snapshot);
   frameIfNeeded(boot.snapshot);
 
   for (const b of boot.snapshot.bodies) {
@@ -687,3 +700,5 @@ const flashBtn = document.getElementById("flashBtn");
 if (flashBtn) {
   flashBtn.addEventListener("click", () => { triggerFlash(); });
 }
+
+// window.onload = () => {triggerFlash();};

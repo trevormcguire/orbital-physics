@@ -29,7 +29,7 @@ class Radians(Unit):
         value = value % (2 * math.pi)  # normalize
         super().__init__(value, "radians")
     
-    def to_degrees(self) -> float:
+    def to_degrees(self):
         return Degrees(math.degrees(self.value))
 
 class Degrees(Unit):
@@ -37,33 +37,33 @@ class Degrees(Unit):
         value = value % 360  # normalize
         super().__init__(value, "degrees")
     
-    def to_radians(self) -> float:
+    def to_radians(self):
         return Radians(math.radians(self.value))
 
 class Meters(Unit):
     def __init__(self, value: float | int):
         super().__init__(value, "meters")
     
-    def to_au(self) -> float:
+    def to_au(self):
         return AU(self.value / AU_METERS)
 
 class AU(Unit):
     def __init__(self, value: float | int):
         super().__init__(value, "au")
     
-    def to_meters(self) -> float:
+    def to_meters(self):
         return Meters(self.value * AU_METERS)
 
 class Kilograms(Unit):
     def __init__(self, value: float | int):
         super().__init__(value, "kilograms")
     
-    def to_solar_masses(self) -> float:
+    def to_solar_masses(self):
         return SolarMasses(self.value / KG_SOLAR)
 
 class SolarMasses(Unit):
     def __init__(self, value: float | int):
         super().__init__(value, "m_solar")
 
-    def to_kilograms(self) -> float:
+    def to_kilograms(self):
         return Kilograms(self.value * KG_SOLAR)

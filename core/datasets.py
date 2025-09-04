@@ -82,11 +82,13 @@ class Body:
     
     NOTE: planets use e, a, i, Ω, ϖ, L0
     while smaller bodies may use e, q, i, Ω, ω, T0.
-    So varpi (ϖ) is used for planets, but not moons.
+    So varpi (ϖ) is typically used for planets, but not moons.
     ϖ = Ω + ω
-    where ω is argument of periapsis and ϖ is the longitude of periapsis
-    https://en.wikipedia.org/wiki/Argument_of_periapsis
-    https://en.wikipedia.org/wiki/Longitude_of_periapsis
+     where ω is [argument of periapsis](https://en.wikipedia.org/wiki/Argument_of_periapsis)
+     and ϖ is the [longitude of periapsis](https://en.wikipedia.org/wiki/Longitude_of_periapsis)
+    
+    See: https://en.wikipedia.org/wiki/Orbital_elements
+
     """
     def __init__(
         self,
@@ -143,9 +145,9 @@ class Body:
 
     def get_fg(self):
         # TODO: convert back if in opposite units?
-        m = self.mass.to_kilograms() if isinstance(self.mass, SolarMasses) else self.mass.value
-        r = self.radius.to_meters() if isinstance(self.radius, AU) else self.radius.value
-        return G * m / (r**2)
+        m = self.mass.to_kilograms() if isinstance(self.mass, SolarMasses) else self.mass
+        r = self.radius.to_meters() if isinstance(self.radius, AU) else self.radius
+        return G * m.value / (r.value**2)
 
     def to_dict(self):
         return {
@@ -185,7 +187,6 @@ class Body:
         return f"Body({self.to_dict()})"
 
     
-
 # https://en.wikipedia.org/wiki/Orbital_elements
 def _make_keplerian_element(a, e, I, L, long_peri, long_node):
     """ Helper to convert from classical elements to our OrbitalElements dataclass."""
