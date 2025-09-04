@@ -141,7 +141,13 @@ def solar_keplerian_elements():
         # https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=Pluto
         {"name": "Pluto", **_make_keplerian_element(39.5886, 0.2518, 17.1477, 38.68366, 113.709, 110.292)},
         # https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=Eris
-        {"name": "Eris", **_make_keplerian_element(68.0506, 0.435675, 43.821, 211.032, 150.714, 36.0460)}
+        {"name": "Eris", **_make_keplerian_element(68.0506, 0.435675, 43.821, 211.032, 150.714, 36.0460)},
+        # https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=20000%20Varuna
+        {"name": "20000 Varuna", **_make_keplerian_element(43.1374, 0.053565, 17.1395, 114.900, 272.579, 97.21338)},
+        # https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=makemake
+        {"name": "Makemake", **_make_keplerian_element(45.4494, 0.16194, 29.03386, 168.8258, 296.95, 79.259)},
+        # https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=28978%20Ixion
+        {"name": "28978 Ixion", **_make_keplerian_element(39.3745, 0.2449, 19.6745, 293.546, 300.585, 71.099)},
     ])
 
 
@@ -160,4 +166,7 @@ def solar_physical_properties():
         {"name": "Pluto", "mass": Kilograms(13024.6e18), "radius": Meters(1188.3e4), "fg": 0.62},
         {"name": "Ceres", "mass": Kilograms(938.416e18), "radius": Meters(469.7e4), "fg": 0.27},
         {"name": "Eris", "mass": Kilograms(16600e18), "radius": Meters(1200.0e4), "fg": 0.77},
+        {"name": "20000 Varuna", "mass": Kilograms(3.698e20), "radius": Meters(334000), "fg": 0.15},
+        {"name": "Makemake", "mass": Kilograms(3100e18), "radius": Meters(714000), "fg": 0.4},
+        {"name": "28978 Ixion", "mass": Kilograms(2.773e17), "radius": Meters(355000), "fg": 0.45},
     ])

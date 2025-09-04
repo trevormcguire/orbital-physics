@@ -22,7 +22,8 @@ const HOVER_SCALE = 1.15;               // hovered sprite scale multiplier
 const FLASH_DURATION_MS = 1000;          // duration of flash fade (ms)
 const FLASH_INTERVAL_MS = FLASH_DURATION_MS / 5;
 
-const API_POLL_MS = 1000;   
+const API_POLL_MS = 1000;
+const TRAIL_MAX = 1000;
 
 /* ----------------------- Scene ------------------------ */
 const canvas = document.getElementById('scene');
@@ -149,10 +150,9 @@ class Body {
     this._lerpDur = 0;
 
     // trail (orbit trace)
-    this.trailMax = 1000;
     this.trail = []; // array of THREE.Vector3
     // Buffer geometry for line
-    const posArr = new Float32Array(this.trailMax * 3);
+    const posArr = new Float32Array(TRAIL_MAX * 3);
     this.trailGeometry = new THREE.BufferGeometry();
     this.trailGeometry.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
     this.trailGeometry.setDrawRange(0, 0);
@@ -171,10 +171,10 @@ class Body {
   }
 
   setTrailFromHistory(historyArr) {
-    console.log("Setting history of length", historyArr.length);
+    // console.log("Setting history of length", historyArr.length);
     if (!historyArr || historyArr.length === 0) return;
     this.trail.length = 0;
-    for (let i = 0; i < historyArr.length && this.trail.length < this.trailMax; ++i) {
+    for (let i = 0; i < historyArr.length && this.trail.length < TRAIL_MAX; ++i) {
       const e = historyArr[i];
       let hx, hy, hz;
       if (Array.isArray(e) && e.length >= 3) {
@@ -189,7 +189,7 @@ class Body {
       const wz = (hz - sceneCenter.z) * sceneScale;
       this.trail.push(new THREE.Vector3(wx, wy, wz));
     }
-    console.log(`Set trail with ${this.trail.length} points`);
+    // console.log(`Set trail with ${this.trail.length} points`);
     if (this.trail.length === 0) return;
 
     const last = this.trail[this.trail.length - 1];
@@ -216,7 +216,7 @@ class Body {
 
     // initialize trail with the current position
     this.trail.length = 0;
-    for (let i = 0; i < Math.min(8, this.trailMax); ++i) this.trail.push(this._nextWorld.clone());
+    for (let i = 0; i < Math.min(8, TRAIL_MAX); ++i) this.trail.push(this._nextWorld.clone());
     this._updateTrailGeometry();
   }
 
@@ -254,7 +254,7 @@ class Body {
 
   _pushTrailSample(worldVec) {
     this.trail.push(worldVec);
-    if (this.trail.length > this.trailMax) this.trail.shift();
+    if (this.trail.length > TRAIL_MAX) this.trail.shift();
     this._updateTrailGeometry();
   }
 
@@ -266,7 +266,7 @@ class Body {
       attr.setXYZ(i, v.x, v.y, v.z);
     }
     // zero out remaining slots to avoid artifacts
-    for (let i = drawCount; i < this.trailMax; ++i) attr.setXYZ(i, 0, 0, 0);
+    for (let i = drawCount; i < TRAIL_MAX; ++i) attr.setXYZ(i, 0, 0, 0);
     attr.needsUpdate = true;
     this.trailGeometry.setDrawRange(0, drawCount);
   }
@@ -365,57 +365,7 @@ function frameIfNeeded(data) {
   framed = true;
 }
 
-/* ------------------------ Data loop ------------------------ */
-// async function fetchState() {
-//   const res = await fetch("/api/state", { cache: "no-store" });
-//   if (!res.ok) return;
-//   const data = await res.json();
-
-//   frameIfNeeded(data);
-
-//   // Update / create bodies
-//   for (const b of data.bodies) {
-//     let body = bodies.get(b.id);
-//     if (!body) {
-//       body = new Body(b.id, b.name, b.radius_km, b.mass_kg);
-//       bodies.set(b.id, body);
-//     } else {
-//       body.radiusKm = b.radius_km;
-//       body.massKg = b.mass_kg;
-//     }
-//     body.setScale(radiusScaler(b.radius_km));
-//     body.setPositionMeters(b.position.x, b.position.y, b.position.z);
-//   }
-// }
-// async function fetchState() {
-//   const res = await fetch("/api/state", { cache: "no-store" });
-//   if (!res.ok) return;
-//   const data = await res.json();
-
-//   frameIfNeeded(data);
-
-//   // Update / create bodies
-//   for (const b of data.bodies) {
-//     let body = bodies.get(b.id);
-//     if (!body) {
-//       body = new Body(b.id, b.name, b.radius_km, b.mass_kg);
-//       let bodyHistory = window.__INITIAL_STATE__[b.name];
-//       console.log("body history", bodyHistory)
-//       body.setTrailFromHistory(bodyHistory);
-//       console.log("Set trail for", b.name, body.trail.length);
-//       bodies.set(b.id, body);
-//       // set initial position immediately
-//       body.setScale(radiusScaler(b.radius_km));
-//       body.setImmediatePositionMeters(b.position.x, b.position.y, b.position.z);
-//     } else {
-//       body.radiusKm = b.radius_km;
-//       body.massKg = b.mass_kg;
-//       body.setScale(radiusScaler(b.radius_km));
-//       // schedule a smooth move to the new API position
-//       body.moveToMeters(b.position.x, b.position.y, b.position.z, API_POLL_MS);
-//     }
-//   }
-// }
+/* ------------------------ Data ------------------------ */
 async function fetchState() {
   const res = await fetch("/api/state", { cache: "no-store" });
   if (!res.ok) return;
@@ -641,12 +591,3 @@ if (flashBtn) {
     triggerFlash();
   });
 }
-
-// if (window.__INITIAL_STATE__) {
-//     console.log("Initial state:", window.__INITIAL_STATE__);
-//     // bootstrapFromInitialState(window.__INITIAL_STATE__);
-//     bodies.forEach(b => {
-//         b.setTrailFromHistory(window.__INITIAL_STATE__[b.name]);
-//         console.log("Set trail for", b.name, b.trail.length);
-//     });
-// }

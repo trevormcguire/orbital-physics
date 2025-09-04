@@ -79,11 +79,19 @@ def generate_engine(
     return engine
 
 
-app = Flask(__name__)
 
+INTERVAL = 3600.  # 1 hour
+INITIAL_STEPS = 5000  # hours to warm up with
 # 1-hour timestep; softening to avoid singularities if needed
 # engine = SimulationEngine(objects=collection, dt=3600.0, softening=1e6, restitution=1.0)
-engine = generate_engine(dt=3600.0, include_sun=True)  # each frame is 1 hour
+engine = generate_engine(dt=INTERVAL, include_sun=True)  # each frame is 1 hour
+# start with some history
+print("Warming up simulation...")
+run_simulation(engine, steps=INITIAL_STEPS, print_every=100)  # 1 month of history
+print("Done.")
+
+app = Flask(__name__)
+
 AU_METERS = 1.495978707e11
 WORLD_SCALE = 1.0 / AU_METERS  # world units == AU
 
@@ -140,7 +148,7 @@ def get_bodies():
 @app.route("/")
 def index():
     # jsonify and send engine.history
-    raw_hist = engine.named_history(limit=1000)  # { name: [ [x,y,z], ... ] } (meters)
+    raw_hist = engine.named_history(limit=5000)  # { name: [ [x,y,z], ... ] } (meters)
     world_hist = {}
     for name, pts in raw_hist.items():
         converted = []
