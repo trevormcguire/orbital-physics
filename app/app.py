@@ -79,11 +79,19 @@ def generate_engine(
     return engine
 
 
-app = Flask(__name__)
 
+INTERVAL = 3600.  # 1 hour
+INITIAL_STEPS = 5000  # hours to warm up with
 # 1-hour timestep; softening to avoid singularities if needed
 # engine = SimulationEngine(objects=collection, dt=3600.0, softening=1e6, restitution=1.0)
-engine = generate_engine(dt=3600.0, include_sun=True)  # each frame is 1 hour
+engine = generate_engine(dt=INTERVAL, include_sun=True)  # each frame is 1 hour
+# start with some history
+print("Warming up simulation...")
+run_simulation(engine, steps=INITIAL_STEPS, print_every=100)  # 1 month of history
+print("Done.")
+
+app = Flask(__name__)
+
 AU_METERS = 1.495978707e11
 WORLD_SCALE = 1.0 / AU_METERS  # world units == AU
 
@@ -100,10 +108,59 @@ def engine_loop():
 thread = threading.Thread(target=engine_loop, daemon=True)
 thread.start()
 
+def get_bodies():
+    bodies = []
+    masses = []
+    radii_km = []
+
+    for obj in engine.objects:
+        pos_m = obj.position()               # meters
+        pos_world = (pos_m * WORLD_SCALE)    # AU for the viewer
+        r_km = float(obj.radius) / 1000.0
+
+        bodies.append({
+            "id": obj.uuid,
+            "name": obj.name,
+            "mass_kg": float(obj.mass),
+            "radius_km": r_km,
+            "position": {
+                "x": float(pos_world[0]),
+                "y": float(pos_world[1]),
+                "z": float(pos_world[2]),
+            }
+        })
+        masses.append(float(obj.mass))
+        radii_km.append(r_km)
+
+    if not masses:
+        masses = [1.0]
+    if not radii_km:
+        radii_km = [1.0]
+
+    return {
+        "bodies": bodies,
+        "mass_min": min(masses),
+        "mass_max": max(masses),
+        "radius_min": min(radii_km),
+        "radius_max": max(radii_km),
+    }
+
 @app.route("/")
 def index():
     # jsonify and send engine.history
-    return render_template("index.html")
+    raw_hist = engine.named_history(limit=5000)  # { name: [ [x,y,z], ... ] } (meters)
+    world_hist = {}
+    for name, pts in raw_hist.items():
+        converted = []
+        for p in pts:
+            # p may be list/tuple or object with x/y/z
+            if isinstance(p, (list, tuple)) and len(p) >= 3:
+                x, y, z = p[0], p[1], p[2]
+            else:
+                x, y, z = p.x, p.y, p.z  # fallback if object
+            converted.append([x * WORLD_SCALE, y * WORLD_SCALE, z * WORLD_SCALE])
+        world_hist[name] = converted
+    return render_template("index.html", initial_state=world_hist, bodies=get_bodies())
 
 @app.route("/api/state")
 def api_state():

@@ -10,12 +10,20 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
  */
 
 /* ----------------------- Config ----------------------- */
-const SIZE_METHOD = 'sqrt';              // 'linear' | 'sqrt' | 'log' | 'loglog'
-const SIZE_RANGE = [0.08, 5.0];         // sprite world-size after view scale
-const TARGET_RADIUS = 100.0;             // world units for farthest body after scaling
+const SIZE_METHOD = 'log';              // 'linear' | 'sqrt' | 'log' | 'loglog'
+const SIZE_RANGE = [0.1, 20.0];         // sprite world-size after view scale
+const TARGET_RADIUS = 500.0;             // world units for farthest body after scaling
 
 const POLL_HZ = 20;
 const HOVER_SCALE = 1.15;               // hovered sprite scale multiplier
+
+// Flash config: same world-size for every flash
+//const FLASH_SIZE = 10.0;                 // world units for flash sprite scale
+const FLASH_DURATION_MS = 1000;          // duration of flash fade (ms)
+const FLASH_INTERVAL_MS = FLASH_DURATION_MS / 5;
+
+const API_POLL_MS = 1000;
+const TRAIL_MAX = 1000;
 
 /* ----------------------- Scene ------------------------ */
 const canvas = document.getElementById('scene');
@@ -46,7 +54,7 @@ const raycaster = new THREE.Raycaster();
 let hovered = null; // Body currently hovered
 
 /* -------------------- Helpers: circle sprite -------------------- */
-function makeCircleTexture(fillStyle = "#bbb", size = 128, strokeWidth = 3) {
+function makeCircleTexture(fillStyle = "#bbbbbbff", size = 128, strokeWidth = 3) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const ctx = c.getContext('2d');
@@ -66,6 +74,23 @@ function makeCircleTexture(fillStyle = "#bbb", size = 128, strokeWidth = 3) {
   tex.anisotropy = 8;
   return tex;
 }
+
+// Soft radial "burst of light" (white core -> transparent edge), good for additive blending
+function makeBurstTexture(size = 256) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+  g.addColorStop(0.0, 'rgba(11, 1, 21, 1)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0.6)');
+  g.addColorStop(1.0, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 8;
+  return tex;
+}
+const FLASH_TEX = makeBurstTexture(256);
 
 /* ------------------- Size scaling by radius ------------------- */
 function makeRadiusScaler(radiiKm, method = SIZE_METHOD, outRange = SIZE_RANGE) {
@@ -109,34 +134,196 @@ class Body {
     this.lastMeters = new THREE.Vector3();
 
     const tex = makeCircleTexture("#bbb", 128, 3);
+    // keep original texture so flashColor can restore it
+    this.baseMap = tex;
     this.material = new THREE.SpriteMaterial({ map: tex, transparent: true });
     this.sprite = new THREE.Sprite(this.material);
     this.sprite.userData.ref = this; // for picking
     scene.add(this.sprite);
 
     this.baseScale = 0.2;
+
+    // interpolation state (world coordinates)
+    this._prevWorld = new THREE.Vector3();   // start of interpolation
+    this._nextWorld = new THREE.Vector3();   // target of interpolation
+    this._lerpStart = 0;
+    this._lerpDur = 0;
+
+    // trail (orbit trace)
+    this.trail = []; // array of THREE.Vector3
+    // Buffer geometry for line
+    const posArr = new Float32Array(TRAIL_MAX * 3);
+    this.trailGeometry = new THREE.BufferGeometry();
+    this.trailGeometry.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+    this.trailGeometry.setDrawRange(0, 0);
+    this.trailMaterial = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.18 });
+    this.trailLine = new THREE.Line(this.trailGeometry, this.trailMaterial);
+    scene.add(this.trailLine);
+
+    // flash color state
+    this._flashTimeout = null;
+    this._currentTempMap = null;
   }
+
   setScale(worldSize) {
     this.baseScale = worldSize;
     this.sprite.scale.set(worldSize, worldSize, 1);
   }
-  setPositionMeters(mx, my, mz) {
+
+  setTrailFromHistory(historyArr) {
+    // console.log("Setting history of length", historyArr.length);
+    if (!historyArr || historyArr.length === 0) return;
+    this.trail.length = 0;
+    for (let i = 0; i < historyArr.length && this.trail.length < TRAIL_MAX; ++i) {
+      const e = historyArr[i];
+      let hx, hy, hz;
+      if (Array.isArray(e) && e.length >= 3) {
+        hx = e[0]; hy = e[1]; hz = e[2];
+      } else if (e && typeof e === 'object' && 'x' in e && 'y' in e && 'z' in e) {
+        hx = e.x; hy = e.y; hz = e.z;
+      } else {
+        continue;
+      }
+      const wx = (hx - sceneCenter.x) * sceneScale;
+      const wy = (hy - sceneCenter.y) * sceneScale;
+      const wz = (hz - sceneCenter.z) * sceneScale;
+      this.trail.push(new THREE.Vector3(wx, wy, wz));
+    }
+    // console.log(`Set trail with ${this.trail.length} points`);
+    if (this.trail.length === 0) return;
+
+    const last = this.trail[this.trail.length - 1];
+    this.sprite.position.copy(last);
+    this._prevWorld.copy(last);
+    this._nextWorld.copy(last);
+    this._lerpStart = 0;
+    this._lerpDur = 0;
+
+    this._updateTrailGeometry();
+  }
+
+  // Immediately set position (used on first frame / creation)
+  setImmediatePositionMeters(mx, my, mz) {
     this.lastMeters.set(mx, my, mz);
-    // center and scale
     const wx = (mx - sceneCenter.x) * sceneScale;
     const wy = (my - sceneCenter.y) * sceneScale;
     const wz = (mz - sceneCenter.z) * sceneScale;
-    this.sprite.position.set(wx, wy, wz);
-}
+    this._prevWorld.set(wx, wy, wz);
+    this._nextWorld.copy(this._prevWorld);
+    this._lerpStart = 0;
+    this._lerpDur = 0;
+    this.sprite.position.copy(this._nextWorld);
+
+    // initialize trail with the current position
+    this.trail.length = 0;
+    for (let i = 0; i < Math.min(8, TRAIL_MAX); ++i) this.trail.push(this._nextWorld.clone());
+    this._updateTrailGeometry();
+  }
+
+  // Schedule a smooth move to a new world position over durationMs
+  moveToMeters(mx, my, mz, durationMs = API_POLL_MS) {
+    this.lastMeters.set(mx, my, mz);
+    const wx = (mx - sceneCenter.x) * sceneScale;
+    const wy = (my - sceneCenter.y) * sceneScale;
+    const wz = (mz - sceneCenter.z) * sceneScale;
+    // shift current displayed position to prev, target becomes next
+    this._prevWorld.copy(this.sprite.position);
+    this._nextWorld.set(wx, wy, wz);
+    this._lerpStart = performance.now();
+    this._lerpDur = Math.max(50, durationMs); // avoid zero duration
+    // push a trail sample at the start of each move (keeps orbit trace)
+    this._pushTrailSample(this._prevWorld.clone());
+  }
+
+  // called each frame to advance interpolation
+  updateLerp(now) {
+    if (this._lerpDur > 0 && this._lerpStart > 0) {
+      const t = Math.min(1, (now - this._lerpStart) / this._lerpDur);
+      this.sprite.position.lerpVectors(this._prevWorld, this._nextWorld, t);
+      // while animating, optionally push trailing intermediate points occasionally
+      // don't push every frame to avoid flooding the trail
+      if (Math.random() < 0.02) this._pushTrailSample(this.sprite.position.clone());
+      if (t >= 1) {
+        this._lerpStart = 0;
+        // ensure final push
+        this._pushTrailSample(this._nextWorld.clone());
+      }
+    }
+    // make sure trail geometry follows sprite updates when hovered state changes color/opacity handled externally
+  }
+
+  _pushTrailSample(worldVec) {
+    this.trail.push(worldVec);
+    if (this.trail.length > TRAIL_MAX) this.trail.shift();
+    this._updateTrailGeometry();
+  }
+
+  _updateTrailGeometry() {
+    const drawCount = this.trail.length;
+    const attr = this.trailGeometry.getAttribute('position');
+    for (let i = 0; i < drawCount; ++i) {
+      const v = this.trail[i];
+      attr.setXYZ(i, v.x, v.y, v.z);
+    }
+    // zero out remaining slots to avoid artifacts
+    for (let i = drawCount; i < TRAIL_MAX; ++i) attr.setXYZ(i, 0, 0, 0);
+    attr.needsUpdate = true;
+    this.trailGeometry.setDrawRange(0, drawCount);
+  }
+
+  setPositionMeters(mx, my, mz) {
+    // legacy: immediate set (kept for compatibility)
+    this.setImmediatePositionMeters(mx, my, mz);
+  }
+
   setHovered(on) {
     if (on) {
       this.sprite.scale.set(this.baseScale * HOVER_SCALE, this.baseScale * HOVER_SCALE, 1);
+      this.trailMaterial.color.set(0x000000);
+      this.trailMaterial.opacity = 1.0;
     } else {
       this.sprite.scale.set(this.baseScale, this.baseScale, 1);
+      this.trailMaterial.color.set(0x000000);
+      this.trailMaterial.opacity = 0.20;
     }
+    this.trailMaterial.needsUpdate = true;
+  }
+
+  // Temporarily tint / recolor the body's sprite by swapping its texture.
+  // color: CSS color string (e.g. "#000" or "rgba(0,0,0,1)")
+  // durationMs: how long before restoring (default: FLASH_DURATION_MS)
+  flashColor(color, durationMs = FLASH_DURATION_MS) {
+    // clear any pending restore
+    if (this._flashTimeout) {
+      clearTimeout(this._flashTimeout);
+      this._flashTimeout = null;
+    }
+    // dispose any previous temp map
+    if (this._currentTempMap) {
+      try { this._currentTempMap.dispose(); } catch (e) {}
+      this._currentTempMap = null;
+    }
+
+    // create a temporary circle texture in the requested color
+    const tmp = makeCircleTexture(color, 128, 3);
+    this._currentTempMap = tmp;
+    this.material.map = tmp;
+    this.material.needsUpdate = true;
+
+    // schedule restore
+    this._flashTimeout = setTimeout(() => {
+      this._flashTimeout = null;
+      // restore original map (guard if removed)
+      try {
+        this.material.map = this.baseMap;
+        this.material.needsUpdate = true;
+      } catch (e) {}
+      // dispose temp map
+      try { tmp.dispose(); } catch (e) {}
+      this._currentTempMap = null;
+    }, durationMs);
   }
 }
-
 /* ------------------------- State ------------------------- */
 const bodies = new Map(); // id -> Body
 let radiusScaler = (r) => 0.2;
@@ -178,7 +365,7 @@ function frameIfNeeded(data) {
   framed = true;
 }
 
-/* ------------------------ Data loop ------------------------ */
+/* ------------------------ Data ------------------------ */
 async function fetchState() {
   const res = await fetch("/api/state", { cache: "no-store" });
   if (!res.ok) return;
@@ -186,21 +373,51 @@ async function fetchState() {
 
   frameIfNeeded(data);
 
-  // Update / create bodies
   for (const b of data.bodies) {
     let body = bodies.get(b.id);
     if (!body) {
       body = new Body(b.id, b.name, b.radius_km, b.mass_kg);
       bodies.set(b.id, body);
+      body.setScale(radiusScaler(b.radius_km));
+
+      // If a history exists (first-time late addition), apply it
+      const hist = window.__BOOTSTRAP__?.history?.[b.name];
+      if (hist && hist.length) {
+        body.setTrailFromHistory(hist);
+        body.lastMeters.set(b.position.x, b.position.y, b.position.z);
+      } else {
+        body.setImmediatePositionMeters(b.position.x, b.position.y, b.position.z);
+      }
     } else {
       body.radiusKm = b.radius_km;
       body.massKg = b.mass_kg;
+      body.setScale(radiusScaler(b.radius_km));
+      body.moveToMeters(b.position.x, b.position.y, b.position.z, API_POLL_MS);
     }
-    body.setScale(radiusScaler(b.radius_km));
-    body.setPositionMeters(b.position.x, b.position.y, b.position.z);
   }
 }
+function bootstrapInitial() {
+  const boot = window.__BOOTSTRAP__;
+  if (!boot || !boot.snapshot || !boot.snapshot.bodies) return;
 
+  // Use snapshot to frame scene & build radius scaler
+  frameIfNeeded(boot.snapshot);
+
+  for (const b of boot.snapshot.bodies) {
+    if (bodies.has(b.id)) continue;
+    const body = new Body(b.id, b.name, b.radius_km, b.mass_kg);
+    bodies.set(b.id, body);
+    body.setScale(radiusScaler(b.radius_km));
+
+    const hist = boot.history?.[b.name];
+    if (hist && hist.length) {
+      body.setTrailFromHistory(hist);
+      body.lastMeters.set(b.position.x, b.position.y, b.position.z);
+    } else {
+      body.setImmediatePositionMeters(b.position.x, b.position.y, b.position.z);
+    }
+  }
+}
 /* ----------------------- Hover picking ----------------------- */
 function onPointerMove(ev) {
   const rect = renderer.domElement.getBoundingClientRect();
@@ -250,6 +467,73 @@ function onPointerMove(ev) {
 
 renderer.domElement.addEventListener('mousemove', onPointerMove);
 
+/* ----------------------- Flashing ----------------------- */
+const activeFlashes = []; // { sprite: THREE.Sprite, start: number, body?: Body, origScale?: THREE.Vector3 }
+let isFlashing = false;
+
+// Trigger a flash from every body (one after another).
+// During a body's turn we temporarily set its sprite scale to the largest object's size
+// so the twinkle appears as a supernova (same world-size for every twinkle).
+function triggerFlash() {
+  if (!bodies.size || isFlashing) return;
+  isFlashing = true;
+
+  // determine largest visible object size (world units)
+  let maxSize = 0;
+  bodies.forEach(b => { if (b.baseScale > maxSize) maxSize = b.baseScale; });
+  if (maxSize <= 0) {
+    isFlashing = false;
+    return;
+  }
+
+  const list = Array.from(bodies.values());
+  list.forEach((body, i) => {
+    setTimeout(() => {
+      // store original scale so we can restore it
+      const orig = body.sprite.scale.clone();
+      // temporarily render the body on top
+      const prevDepthTest = body.sprite.material.depthTest ?? true;
+      const prevRenderOrder = body.sprite.renderOrder ?? 0;
+      body.sprite.material.depthTest = false;
+      body.sprite.renderOrder = 998;
+      // resize body to max size so the "supernova" covers the same world area
+      body.sprite.scale.set(maxSize, maxSize, 1);
+      body.flashColor("#000", FLASH_DURATION_MS);
+
+      // create a burst sprite drawn on top
+      const mat = new THREE.SpriteMaterial({
+        map: FLASH_TEX,
+        transparent: true,
+        opacity: 1.0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: false
+      });
+      const s = new THREE.Sprite(mat);
+      s.position.copy(body.sprite.position);
+      s.scale.set(maxSize, maxSize, 1);
+      s.renderOrder = 999;
+      scene.add(s);
+      activeFlashes.push({ sprite: s, start: performance.now(), body, orig, prevDepthTest, prevRenderOrder });
+
+      // restore the body's scale / material state after flash duration
+      setTimeout(() => {
+        // body might have been removed; guard
+        try {
+          if (body.sprite) {
+            body.sprite.scale.copy(orig);
+            body.sprite.material.depthTest = prevDepthTest;
+            body.sprite.renderOrder = prevRenderOrder;
+          }
+        } catch (e) {}
+      }, FLASH_DURATION_MS);
+    }, i * FLASH_INTERVAL_MS);
+  });
+
+  // clear flashing flag after entire sequence completes
+  const totalMs = list.length * FLASH_INTERVAL_MS + FLASH_DURATION_MS;
+  setTimeout(() => { isFlashing = false; }, totalMs + 20);
+}
 /* ----------------------- Render loop ----------------------- */
 function onResize() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -259,17 +543,51 @@ function onResize() {
 }
 window.addEventListener('resize', onResize);
 
+
 let lastFetch = 0;
-const fetchIntervalMs = 1000 / POLL_HZ;
 
 function animate(t) {
   requestAnimationFrame(animate);
-  if (t - lastFetch > fetchIntervalMs) {
+  const now = performance.now();
+
+  // poll server every API_POLL_MS
+  if (now - lastFetch > API_POLL_MS) {
     fetchState().catch(() => {});
-    lastFetch = t;
+    lastFetch = now;
   }
+
+  // update active flashes
+  for (let i = activeFlashes.length - 1; i >= 0; --i) {
+    const item = activeFlashes[i];
+    const dt = now - item.start;
+    const f = Math.max(0, 1 - dt / FLASH_DURATION_MS);
+    item.sprite.material.opacity = f;
+    if (f <= 0) {
+      scene.remove(item.sprite);
+      if (item.sprite.material.map && item.sprite.material.map !== FLASH_TEX) {
+        item.sprite.material.map.dispose();
+      }
+      item.sprite.material.dispose();
+      activeFlashes.splice(i, 1);
+    }
+  }
+
+
+  // advance body interpolations and ensure trail follow current sprite
+  bodies.forEach(b => {
+    b.updateLerp(now);
+  });
+
   controls.update();
   renderer.render(scene, camera);
 }
 onResize();
+bootstrapInitial();
+lastFetch = performance.now();
 animate(0);
+const flashBtn = document.getElementById('flashBtn');
+if (flashBtn) {
+  flashBtn.addEventListener('click', () => {
+    triggerFlash();
+  });
+}
