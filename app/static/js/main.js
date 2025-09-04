@@ -14,7 +14,7 @@ const SIZE_METHOD = 'log';              // 'linear' | 'sqrt' | 'log' | 'loglog'
 const SIZE_RANGE = [0.1, 20.0];         // sprite world-size after view scale
 const TARGET_RADIUS = 500.0;             // world units for farthest body after scaling
 
-const POLL_HZ = 20;
+// const POLL_HZ = 20;
 const HOVER_SCALE = 1.15;               // hovered sprite scale multiplier
 
 // Flash config: same world-size for every flash
