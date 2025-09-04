@@ -18,9 +18,11 @@ const POLL_HZ = 20;
 const HOVER_SCALE = 1.15;               // hovered sprite scale multiplier
 
 // Flash config: same world-size for every flash
-const FLASH_SIZE = 10.0;                 // world units for flash sprite scale
+//const FLASH_SIZE = 10.0;                 // world units for flash sprite scale
 const FLASH_DURATION_MS = 1000;          // duration of flash fade (ms)
 const FLASH_INTERVAL_MS = FLASH_DURATION_MS / 5;
+
+const API_POLL_MS = 1000;   
 
 /* ----------------------- Scene ------------------------ */
 const canvas = document.getElementById('scene');
@@ -140,29 +142,153 @@ class Body {
 
     this.baseScale = 0.2;
 
+    // interpolation state (world coordinates)
+    this._prevWorld = new THREE.Vector3();   // start of interpolation
+    this._nextWorld = new THREE.Vector3();   // target of interpolation
+    this._lerpStart = 0;
+    this._lerpDur = 0;
+
+    // trail (orbit trace)
+    this.trailMax = 1000;
+    this.trail = []; // array of THREE.Vector3
+    // Buffer geometry for line
+    const posArr = new Float32Array(this.trailMax * 3);
+    this.trailGeometry = new THREE.BufferGeometry();
+    this.trailGeometry.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+    this.trailGeometry.setDrawRange(0, 0);
+    this.trailMaterial = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.18 });
+    this.trailLine = new THREE.Line(this.trailGeometry, this.trailMaterial);
+    scene.add(this.trailLine);
+
     // flash color state
     this._flashTimeout = null;
     this._currentTempMap = null;
   }
+
   setScale(worldSize) {
     this.baseScale = worldSize;
     this.sprite.scale.set(worldSize, worldSize, 1);
   }
-  setPositionMeters(mx, my, mz) {
+
+  setTrailFromHistory(historyArr) {
+    console.log("Setting history of length", historyArr.length);
+    if (!historyArr || historyArr.length === 0) return;
+    this.trail.length = 0;
+    for (let i = 0; i < historyArr.length && this.trail.length < this.trailMax; ++i) {
+      const e = historyArr[i];
+      let hx, hy, hz;
+      if (Array.isArray(e) && e.length >= 3) {
+        hx = e[0]; hy = e[1]; hz = e[2];
+      } else if (e && typeof e === 'object' && 'x' in e && 'y' in e && 'z' in e) {
+        hx = e.x; hy = e.y; hz = e.z;
+      } else {
+        continue;
+      }
+      const wx = (hx - sceneCenter.x) * sceneScale;
+      const wy = (hy - sceneCenter.y) * sceneScale;
+      const wz = (hz - sceneCenter.z) * sceneScale;
+      this.trail.push(new THREE.Vector3(wx, wy, wz));
+    }
+    console.log(`Set trail with ${this.trail.length} points`);
+    if (this.trail.length === 0) return;
+
+    const last = this.trail[this.trail.length - 1];
+    this.sprite.position.copy(last);
+    this._prevWorld.copy(last);
+    this._nextWorld.copy(last);
+    this._lerpStart = 0;
+    this._lerpDur = 0;
+
+    this._updateTrailGeometry();
+  }
+
+  // Immediately set position (used on first frame / creation)
+  setImmediatePositionMeters(mx, my, mz) {
     this.lastMeters.set(mx, my, mz);
-    // center and scale
     const wx = (mx - sceneCenter.x) * sceneScale;
     const wy = (my - sceneCenter.y) * sceneScale;
     const wz = (mz - sceneCenter.z) * sceneScale;
-    this.sprite.position.set(wx, wy, wz);
-}
+    this._prevWorld.set(wx, wy, wz);
+    this._nextWorld.copy(this._prevWorld);
+    this._lerpStart = 0;
+    this._lerpDur = 0;
+    this.sprite.position.copy(this._nextWorld);
+
+    // initialize trail with the current position
+    this.trail.length = 0;
+    for (let i = 0; i < Math.min(8, this.trailMax); ++i) this.trail.push(this._nextWorld.clone());
+    this._updateTrailGeometry();
+  }
+
+  // Schedule a smooth move to a new world position over durationMs
+  moveToMeters(mx, my, mz, durationMs = API_POLL_MS) {
+    this.lastMeters.set(mx, my, mz);
+    const wx = (mx - sceneCenter.x) * sceneScale;
+    const wy = (my - sceneCenter.y) * sceneScale;
+    const wz = (mz - sceneCenter.z) * sceneScale;
+    // shift current displayed position to prev, target becomes next
+    this._prevWorld.copy(this.sprite.position);
+    this._nextWorld.set(wx, wy, wz);
+    this._lerpStart = performance.now();
+    this._lerpDur = Math.max(50, durationMs); // avoid zero duration
+    // push a trail sample at the start of each move (keeps orbit trace)
+    this._pushTrailSample(this._prevWorld.clone());
+  }
+
+  // called each frame to advance interpolation
+  updateLerp(now) {
+    if (this._lerpDur > 0 && this._lerpStart > 0) {
+      const t = Math.min(1, (now - this._lerpStart) / this._lerpDur);
+      this.sprite.position.lerpVectors(this._prevWorld, this._nextWorld, t);
+      // while animating, optionally push trailing intermediate points occasionally
+      // don't push every frame to avoid flooding the trail
+      if (Math.random() < 0.02) this._pushTrailSample(this.sprite.position.clone());
+      if (t >= 1) {
+        this._lerpStart = 0;
+        // ensure final push
+        this._pushTrailSample(this._nextWorld.clone());
+      }
+    }
+    // make sure trail geometry follows sprite updates when hovered state changes color/opacity handled externally
+  }
+
+  _pushTrailSample(worldVec) {
+    this.trail.push(worldVec);
+    if (this.trail.length > this.trailMax) this.trail.shift();
+    this._updateTrailGeometry();
+  }
+
+  _updateTrailGeometry() {
+    const drawCount = this.trail.length;
+    const attr = this.trailGeometry.getAttribute('position');
+    for (let i = 0; i < drawCount; ++i) {
+      const v = this.trail[i];
+      attr.setXYZ(i, v.x, v.y, v.z);
+    }
+    // zero out remaining slots to avoid artifacts
+    for (let i = drawCount; i < this.trailMax; ++i) attr.setXYZ(i, 0, 0, 0);
+    attr.needsUpdate = true;
+    this.trailGeometry.setDrawRange(0, drawCount);
+  }
+
+  setPositionMeters(mx, my, mz) {
+    // legacy: immediate set (kept for compatibility)
+    this.setImmediatePositionMeters(mx, my, mz);
+  }
+
   setHovered(on) {
     if (on) {
       this.sprite.scale.set(this.baseScale * HOVER_SCALE, this.baseScale * HOVER_SCALE, 1);
+      this.trailMaterial.color.set(0x000000);
+      this.trailMaterial.opacity = 1.0;
     } else {
       this.sprite.scale.set(this.baseScale, this.baseScale, 1);
+      this.trailMaterial.color.set(0x000000);
+      this.trailMaterial.opacity = 0.20;
     }
+    this.trailMaterial.needsUpdate = true;
   }
+
   // Temporarily tint / recolor the body's sprite by swapping its texture.
   // color: CSS color string (e.g. "#000" or "rgba(0,0,0,1)")
   // durationMs: how long before restoring (default: FLASH_DURATION_MS)
@@ -198,7 +324,6 @@ class Body {
     }, durationMs);
   }
 }
-
 /* ------------------------- State ------------------------- */
 const bodies = new Map(); // id -> Body
 let radiusScaler = (r) => 0.2;
@@ -241,6 +366,56 @@ function frameIfNeeded(data) {
 }
 
 /* ------------------------ Data loop ------------------------ */
+// async function fetchState() {
+//   const res = await fetch("/api/state", { cache: "no-store" });
+//   if (!res.ok) return;
+//   const data = await res.json();
+
+//   frameIfNeeded(data);
+
+//   // Update / create bodies
+//   for (const b of data.bodies) {
+//     let body = bodies.get(b.id);
+//     if (!body) {
+//       body = new Body(b.id, b.name, b.radius_km, b.mass_kg);
+//       bodies.set(b.id, body);
+//     } else {
+//       body.radiusKm = b.radius_km;
+//       body.massKg = b.mass_kg;
+//     }
+//     body.setScale(radiusScaler(b.radius_km));
+//     body.setPositionMeters(b.position.x, b.position.y, b.position.z);
+//   }
+// }
+// async function fetchState() {
+//   const res = await fetch("/api/state", { cache: "no-store" });
+//   if (!res.ok) return;
+//   const data = await res.json();
+
+//   frameIfNeeded(data);
+
+//   // Update / create bodies
+//   for (const b of data.bodies) {
+//     let body = bodies.get(b.id);
+//     if (!body) {
+//       body = new Body(b.id, b.name, b.radius_km, b.mass_kg);
+//       let bodyHistory = window.__INITIAL_STATE__[b.name];
+//       console.log("body history", bodyHistory)
+//       body.setTrailFromHistory(bodyHistory);
+//       console.log("Set trail for", b.name, body.trail.length);
+//       bodies.set(b.id, body);
+//       // set initial position immediately
+//       body.setScale(radiusScaler(b.radius_km));
+//       body.setImmediatePositionMeters(b.position.x, b.position.y, b.position.z);
+//     } else {
+//       body.radiusKm = b.radius_km;
+//       body.massKg = b.mass_kg;
+//       body.setScale(radiusScaler(b.radius_km));
+//       // schedule a smooth move to the new API position
+//       body.moveToMeters(b.position.x, b.position.y, b.position.z, API_POLL_MS);
+//     }
+//   }
+// }
 async function fetchState() {
   const res = await fetch("/api/state", { cache: "no-store" });
   if (!res.ok) return;
@@ -248,21 +423,51 @@ async function fetchState() {
 
   frameIfNeeded(data);
 
-  // Update / create bodies
   for (const b of data.bodies) {
     let body = bodies.get(b.id);
     if (!body) {
       body = new Body(b.id, b.name, b.radius_km, b.mass_kg);
       bodies.set(b.id, body);
+      body.setScale(radiusScaler(b.radius_km));
+
+      // If a history exists (first-time late addition), apply it
+      const hist = window.__BOOTSTRAP__?.history?.[b.name];
+      if (hist && hist.length) {
+        body.setTrailFromHistory(hist);
+        body.lastMeters.set(b.position.x, b.position.y, b.position.z);
+      } else {
+        body.setImmediatePositionMeters(b.position.x, b.position.y, b.position.z);
+      }
     } else {
       body.radiusKm = b.radius_km;
       body.massKg = b.mass_kg;
+      body.setScale(radiusScaler(b.radius_km));
+      body.moveToMeters(b.position.x, b.position.y, b.position.z, API_POLL_MS);
     }
-    body.setScale(radiusScaler(b.radius_km));
-    body.setPositionMeters(b.position.x, b.position.y, b.position.z);
   }
 }
+function bootstrapInitial() {
+  const boot = window.__BOOTSTRAP__;
+  if (!boot || !boot.snapshot || !boot.snapshot.bodies) return;
 
+  // Use snapshot to frame scene & build radius scaler
+  frameIfNeeded(boot.snapshot);
+
+  for (const b of boot.snapshot.bodies) {
+    if (bodies.has(b.id)) continue;
+    const body = new Body(b.id, b.name, b.radius_km, b.mass_kg);
+    bodies.set(b.id, body);
+    body.setScale(radiusScaler(b.radius_km));
+
+    const hist = boot.history?.[b.name];
+    if (hist && hist.length) {
+      body.setTrailFromHistory(hist);
+      body.lastMeters.set(b.position.x, b.position.y, b.position.z);
+    } else {
+      body.setImmediatePositionMeters(b.position.x, b.position.y, b.position.z);
+    }
+  }
+}
 /* ----------------------- Hover picking ----------------------- */
 function onPointerMove(ev) {
   const rect = renderer.domElement.getBoundingClientRect();
@@ -388,17 +593,20 @@ function onResize() {
 }
 window.addEventListener('resize', onResize);
 
+
 let lastFetch = 0;
-const fetchIntervalMs = 1000 / POLL_HZ;
 
 function animate(t) {
   requestAnimationFrame(animate);
-  if (t - lastFetch > fetchIntervalMs) {
-    fetchState().catch(() => {});
-    lastFetch = t;
-  }
-  // update active flashes
   const now = performance.now();
+
+  // poll server every API_POLL_MS
+  if (now - lastFetch > API_POLL_MS) {
+    fetchState().catch(() => {});
+    lastFetch = now;
+  }
+
+  // update active flashes
   for (let i = activeFlashes.length - 1; i >= 0; --i) {
     const item = activeFlashes[i];
     const dt = now - item.start;
@@ -406,38 +614,26 @@ function animate(t) {
     item.sprite.material.opacity = f;
     if (f <= 0) {
       scene.remove(item.sprite);
-      // if (item.sprite.material.map) item.sprite.material.map.dispose();
-      // only dispose per-sprite maps if they do not reference the shared FLASH_TEX
       if (item.sprite.material.map && item.sprite.material.map !== FLASH_TEX) {
         item.sprite.material.map.dispose();
       }
-      // item.sprite.material.dispose();
-      item.sprite.material.dispose(); // keep shared FLASH_TEX alive
+      item.sprite.material.dispose();
       activeFlashes.splice(i, 1);
     }
   }
-//   for (let i = activeFlashes.length - 1; i >= 0; --i) {
-//     const item = activeFlashes[i];
-//     const p = (now - item.start) / FLASH_DURATION_MS; // 0..1
-//     if (p >= 1) {
-//       scene.remove(item.sprite);
-//       if (item.sprite.material.map) item.sprite.material.map.dispose();
-//       item.sprite.material.dispose();
-//       activeFlashes.splice(i, 1);
-//       continue;
-//     }
-//     // Waxing to the SAME size at mid-duration, then waning.
-//     // At p = 0.5, sin(pi * 0.5) = 1 -> size == largest object's size.
-//     const amp = Math.sin(Math.PI * p); // 0 -> 1 -> 0
-//     const s = Math.max(amp * item.maxSize, 1e-3);
-//     item.sprite.scale.set(s, s, 1);
-//     item.sprite.material.opacity = amp;
-// }
-  // 
+
+
+  // advance body interpolations and ensure trail follow current sprite
+  bodies.forEach(b => {
+    b.updateLerp(now);
+  });
+
   controls.update();
   renderer.render(scene, camera);
 }
 onResize();
+bootstrapInitial();
+lastFetch = performance.now();
 animate(0);
 const flashBtn = document.getElementById('flashBtn');
 if (flashBtn) {
@@ -445,3 +641,12 @@ if (flashBtn) {
     triggerFlash();
   });
 }
+
+// if (window.__INITIAL_STATE__) {
+//     console.log("Initial state:", window.__INITIAL_STATE__);
+//     // bootstrapFromInitialState(window.__INITIAL_STATE__);
+//     bodies.forEach(b => {
+//         b.setTrailFromHistory(window.__INITIAL_STATE__[b.name]);
+//         console.log("Set trail for", b.name, b.trail.length);
+//     });
+// }

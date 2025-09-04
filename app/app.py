@@ -100,10 +100,59 @@ def engine_loop():
 thread = threading.Thread(target=engine_loop, daemon=True)
 thread.start()
 
+def get_bodies():
+    bodies = []
+    masses = []
+    radii_km = []
+
+    for obj in engine.objects:
+        pos_m = obj.position()               # meters
+        pos_world = (pos_m * WORLD_SCALE)    # AU for the viewer
+        r_km = float(obj.radius) / 1000.0
+
+        bodies.append({
+            "id": obj.uuid,
+            "name": obj.name,
+            "mass_kg": float(obj.mass),
+            "radius_km": r_km,
+            "position": {
+                "x": float(pos_world[0]),
+                "y": float(pos_world[1]),
+                "z": float(pos_world[2]),
+            }
+        })
+        masses.append(float(obj.mass))
+        radii_km.append(r_km)
+
+    if not masses:
+        masses = [1.0]
+    if not radii_km:
+        radii_km = [1.0]
+
+    return {
+        "bodies": bodies,
+        "mass_min": min(masses),
+        "mass_max": max(masses),
+        "radius_min": min(radii_km),
+        "radius_max": max(radii_km),
+    }
+
 @app.route("/")
 def index():
     # jsonify and send engine.history
-    return render_template("index.html")
+    raw_hist = engine.named_history(limit=1000)  # { name: [ [x,y,z], ... ] } (meters)
+    world_hist = {}
+    for name, pts in raw_hist.items():
+        converted = []
+        for p in pts:
+            # p may be list/tuple or object with x/y/z
+            if isinstance(p, (list, tuple)) and len(p) >= 3:
+                x, y, z = p[0], p[1], p[2]
+            else:
+                x, y, z = p.x, p.y, p.z  # fallback if object
+            converted.append([x * WORLD_SCALE, y * WORLD_SCALE, z * WORLD_SCALE])
+        world_hist[name] = converted
+    return render_template("index.html", initial_state=world_hist, bodies=get_bodies())
 
 @app.route("/api/state")
 def api_state():

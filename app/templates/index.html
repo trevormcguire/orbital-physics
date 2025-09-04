@@ -56,6 +56,13 @@
   <canvas id="scene"></canvas>
   <div id="tooltip"></div>
   <button id="flashBtn" title="Flash">Flash</button>
+  <script>
+    // window.__INITIAL_STATE__ = {{ initial_state | safe if initial_state is defined else 'null' }};
+    window.__BOOTSTRAP__ = {
+      history: {{ initial_state|tojson }},
+      snapshot: {{ bodies|tojson }}
+    };
+  </script>
   <script type="module" src="/static/js/main.js"></script>
 </body>
 </html>

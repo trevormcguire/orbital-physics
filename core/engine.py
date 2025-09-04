@@ -23,6 +23,12 @@ class SimulationEngine:
         # initial accelerations
         self.acc, self.last_potential = pairwise_accelerations(self.objects.objects, eps=self.softening)
 
+    def named_history(self, limit: int = 0):
+        """Return history with object names as keys instead of UUIDs."""
+        if limit > 0:
+            return {obj.name: self.history[obj.uuid][-limit:] for obj in self.objects}
+        return {obj.name: self.history[obj.uuid] for obj in self.objects}
+
     def step(self):
         dt = self.dt
 
