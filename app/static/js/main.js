@@ -20,7 +20,7 @@ const HOVER_SCALE = 1.15;               // hovered sprite scale multiplier
 // Flash config: same world-size for every flash
 const FLASH_SIZE = 10.0;                 // world units for flash sprite scale
 const FLASH_DURATION_MS = 1000;          // duration of flash fade (ms)
-const FLASH_INTERVAL_MS = FLASH_DURATION_MS;
+const FLASH_INTERVAL_MS = FLASH_DURATION_MS / 5;
 
 /* ----------------------- Scene ------------------------ */
 const canvas = document.getElementById('scene');
@@ -137,6 +137,10 @@ class Body {
     scene.add(this.sprite);
 
     this.baseScale = 0.2;
+
+    // flash color state
+    this._flashTimeout = null;
+    this._currentTempMap = null;
   }
   setScale(worldSize) {
     this.baseScale = worldSize;
@@ -156,6 +160,40 @@ class Body {
     } else {
       this.sprite.scale.set(this.baseScale, this.baseScale, 1);
     }
+  }
+  // Temporarily tint / recolor the body's sprite by swapping its texture.
+  // color: CSS color string (e.g. "#000" or "rgba(0,0,0,1)")
+  // durationMs: how long before restoring (default: FLASH_DURATION_MS)
+  flashColor(color, durationMs = FLASH_DURATION_MS) {
+    // clear any pending restore
+    if (this._flashTimeout) {
+      clearTimeout(this._flashTimeout);
+      this._flashTimeout = null;
+    }
+    // dispose any previous temp map
+    if (this._currentTempMap) {
+      try { this._currentTempMap.dispose(); } catch (e) {}
+      this._currentTempMap = null;
+    }
+
+    // create a temporary circle texture in the requested color
+    const tmp = makeCircleTexture(color, 128, 3);
+    this._currentTempMap = tmp;
+    this.material.map = tmp;
+    this.material.needsUpdate = true;
+
+    // schedule restore
+    this._flashTimeout = setTimeout(() => {
+      this._flashTimeout = null;
+      // restore original map (guard if removed)
+      try {
+        this.material.map = this.baseMap;
+        this.material.needsUpdate = true;
+      } catch (e) {}
+      // dispose temp map
+      try { tmp.dispose(); } catch (e) {}
+      this._currentTempMap = null;
+    }, durationMs);
   }
 }
 
@@ -303,6 +341,7 @@ function triggerFlash() {
       body.sprite.renderOrder = 998;
       // resize body to max size so the "supernova" covers the same world area
       body.sprite.scale.set(maxSize, maxSize, 1);
+      body.flashColor("#000", FLASH_DURATION_MS);
 
       // create a burst sprite drawn on top
       const mat = new THREE.SpriteMaterial({
@@ -338,43 +377,6 @@ function triggerFlash() {
   const totalMs = list.length * FLASH_INTERVAL_MS + FLASH_DURATION_MS;
   setTimeout(() => { isFlashing = false; }, totalMs + 20);
 }
-// const activeFlashes = []; // { sprite: THREE.Sprite, start: number }
-
-// // Trigger a flash from every body
-// function triggerFlash() {
-//   if (!bodies.size) return;
-
-//   // determine largest visible object size (world units)
-//   let maxSize = 0;
-//   bodies.forEach(b => { if (b.baseScale > maxSize) maxSize = b.baseScale; });
-//   if (maxSize <= 0) return;
-
-//   // create per-sprite flash textures so disposing doesn't race between sprites
-//   bodies.forEach(body => {
-//     const flashTex = makeCircleTexture("#0ebcc5ff", 128, 10); // bright white burst
-//     const mat = new THREE.SpriteMaterial({
-//       // map: flashTex,
-//       map: FLASH_TEX,
-//       transparent: true,
-//       opacity: 1.0,
-//       blending: THREE.AdditiveBlending,
-//       depthWrite: false,
-//       depthTest: false // draw on top so it looks like an expanding flash/supernova
-//     });
-//     const s = new THREE.Sprite(mat);
-//     s.position.copy(body.sprite.position);
-//     // set to same size as the largest object (world units)
-//     s.scale.set(maxSize, maxSize, 1);
-//     // start tiny; scale will animate to maxSize at mid-duration
-//     // s.scale.set(1e-3, 1e-3, 1);
-//     // ensure drawn after other objects
-//     s.scale.set(FLASH_SIZE, FLASH_SIZE, 1);
-//     s.renderOrder = 999;
-//     scene.add(s);
-//     // activeFlashes.push({ sprite: s, start: performance.now() });
-//     activeFlashes.push({ sprite: s, start: performance.now(), maxSize });
-//   });
-// }
 /* ----------------------- Render loop ----------------------- */
 function onResize() {
   const w = window.innerWidth, h = window.innerHeight;
