@@ -11,8 +11,8 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 /* ----------------------- Config ----------------------- */
 const SIZE_METHOD = 'log';              // 'linear' | 'sqrt' | 'log' | 'loglog'
-const SIZE_RANGE = [0.1, 10.0];         // sprite world-size after view scale
-const TARGET_RADIUS = 100.0;             // world units for farthest body after scaling
+const SIZE_RANGE = [0.1, 20.0];         // sprite world-size after view scale
+const TARGET_RADIUS = 500.0;             // world units for farthest body after scaling
 
 const POLL_HZ = 20;
 const HOVER_SCALE = 1.15;               // hovered sprite scale multiplier
@@ -131,6 +131,8 @@ class Body {
     this.lastMeters = new THREE.Vector3();
 
     const tex = makeCircleTexture("#bbb", 128, 3);
+    // keep original texture so flashColor can restore it
+    this.baseMap = tex;
     this.material = new THREE.SpriteMaterial({ map: tex, transparent: true });
     this.sprite = new THREE.Sprite(this.material);
     this.sprite.userData.ref = this; // for picking
