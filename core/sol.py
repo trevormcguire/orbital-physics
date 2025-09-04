@@ -126,15 +126,30 @@ class OrbitalElements:
     omega: float  # rad
     M: float  # rad
 
+    def b(self) -> float:
+        """compute the semi-minor axis (b) from the semi-major axis (a) and eccentricity (e)."""
+        # semi-minor axis (b = a * sqrt(1 - e^2))
+        return self.a * math.sqrt(1 - self.e**2)
+
 # ----------------- Keplerian → Cartesian (heliocentric/ecliptic) --------------
 
 def solve_kepler(M: float, e: float, tol: float = 1e-12, max_iter: int = 50) -> float:
-    """Solve Kepler's equation M = E - e sin E for E (elliptic).
+    """Estimate E in Kepler's equation M = E - e sin E for E (elliptic).
+
+    https://en.wikipedia.org/wiki/Kepler%27s_equation
     
     Kepler’s equation links time to position along an elliptical orbit.
-    1. M (mean anomaly) is a clock: it grows linearly with time and tells you how far around the orbit you should be, on average.
-    2. e is eccentricity (0=circle, <1=ellipse).
-    3. E (eccentric anomaly) is an angular parameter that defines the position of a body that is moving along an ellipse.
+
+    Params
+    -------
+    1. M (mean anomaly) in radians
+    2. e is eccentricity in radians
+    
+    Returns
+    -------
+    E, the eccentric anomaly, which is an angular parameter that defines the
+    position of a body that is moving along an ellipse. It is useful to compute
+    the position of a point moving in a Keplerian orbit.
     """
     # initial guess, use E=M if low eccentricity, otherwise pi
     E = M if e < 0.8 else math.pi
@@ -148,26 +163,36 @@ def solve_kepler(M: float, e: float, tol: float = 1e-12, max_iter: int = 50) -> 
             break
     return E  # radians
 
+def mean_motion(a: float, mu: float):
+    """The angular speed required for a body to complete one orbit.
+    
+    See "Mean Motion and Kepler's Laws" https://en.wikipedia.org/wiki/Mean_motion
+    for derivation.
+    """
+    n = math.sqrt(mu / a**3)
+    return n
+
 def elements_to_state(mu: float, el: OrbitalElements) -> tuple[np.ndarray, np.ndarray]:
     """Return r,v in inertial frame given standard Keplerian elements.
 
     Uses the orbital elements to calculate E in order to compute orbital plane x,y and velocities,
     then rotates by ω, i, Ω to get inertial r and v.
     """
-    E = solve_kepler(el.M, el.e)
+    E = solve_kepler(el.M, el.e)  # a point on the ellipse
     # position in orbital plane
-    cosE, sinE = math.cos(E), math.sin(E)
-    x_op = el.a * (cosE - el.e)
-    y_op = el.a * math.sqrt(1 - el.e * el.e) * sinE
+    cos_E, sin_E = math.cos(E), math.sin(E)
+
+    x_op = el.a * (cos_E - el.e)
+    y_op = el.b() * sin_E
     # velocity in orbital plane
-    n = math.sqrt(mu / (el.a **3))
-    vx_op = -el.a * n * sinE / (1 - el.e * cosE)
-    vy_op =  el.a * n * math.sqrt(1 - el.e * el.e) * cosE / (1 - el.e * cosE)
+    n = mean_motion(a=el.a, mu=mu)
+    vx_op = -el.a * n * sin_E / (1 - el.e * cos_E)
+    vy_op =  el.a * n * math.sqrt(1 - el.e**2) * cos_E / (1 - el.e * cos_E)
 
     # rotate by argument of periapsis, inclination, longitude of node
     cw, sw = math.cos(el.omega), math.sin(el.omega)
-    cO, sO = math.cos(el.Omega), math.sin(el.Omega)
     ci, si = math.cos(el.i), math.sin(el.i)
+    cO, sO = math.cos(el.Omega), math.sin(el.Omega)
 
     # rotation matrix R = Rz(O) * Rx(i) * Rz(w)
     R11 = cO*cw - sO*sw*ci

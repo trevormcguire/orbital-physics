@@ -19,7 +19,7 @@ class SimulationEngine:
         self.dt = float(dt)
         self.softening = float(softening)
         self.restitution = float(restitution)
-        self.history = {obj.uuid: [obj.position().copy()] for obj in self.objects}
+        self.history = {obj.uuid: [obj.position().copy().tolist()] for obj in self.objects}
         # initial accelerations
         self.acc, self.last_potential = pairwise_accelerations(self.objects.objects, eps=self.softening)
 
@@ -47,7 +47,7 @@ class SimulationEngine:
 
         # Record
         for obj in self.objects:
-            self.history[obj.uuid].append(obj.position().copy())
+            self.history[obj.uuid].append(obj.position().copy().tolist())
 
     def run(self, steps: int):
         for _ in range(int(steps)):

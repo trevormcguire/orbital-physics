@@ -163,15 +163,6 @@ def three_body_equilateral(
     engine = SimulationEngine(collection, dt=dt, softening=softening, restitution=1.0)
 
     run_simulation(engine, steps=steps, print_every=500)
-    # plot_orbits(
-    #     engine,
-    #     every_n=5,
-    #     plane="xy",
-    #     separate=False,
-    #     with_velocity=False,
-    #     show_barycenter=True,
-    #     barycenter_trail=True
-    # )
     render_orbital_mp4(
         engine,
         out_path=out_path,
@@ -199,13 +190,13 @@ def sol_from_kepler_dataset(
     import numpy as np
 
     from core.datasets import solar_keplerian_elements, solar_physical_properties
-    from core.sol import OrbitalElements, elements_to_state, G, DAY, MASS, RADIUS
+    from core.sol import OrbitalElements, elements_to_state, G, DAY
     from core.physics import Object, Coordinates, ObjectCollection
     from core.engine import SimulationEngine, run_simulation
     from core.plot import render_orbital_mp4
 
     # get dataset and convert to meters/radians (Dataset defaults do this)
-    ds = solar_keplerian_elements().convert_types()
+    ds = solar_keplerian_elements().convert_types(angle_unit="radians")
     rows = ds.values()  # list[dict] with numeric 'a' (m), angles (rad)
 
     phys = solar_physical_properties().convert_types(mass_unit="kilograms", distance_unit="meters").values()
@@ -233,19 +224,18 @@ def sol_from_kepler_dataset(
         a = float(rec["a"])
         e = float(rec["e"])
         I = float(rec["I"])
-        L = float(rec["L"])
-        varpi = float(rec["long.peri"])
-        O = float(rec["long.node"])
+        L = float(rec["L"])  # mean longitude (defined as L = Ω + ω + M , or L = ϖ + M)
+        varpi = float(rec["long.peri"])  # longitude of periapsis (closest point, defied as ϖ = Ω + ω)
+        O = float(rec["long.node"])  # longitude of ascending node (defied as Ω)
 
         # Compute mean anomaly and argument of periapsis consistent with core/sol.jpl logic
-        M = (L - varpi) % (2 * math.pi)
-        omega = (varpi - O) % (2 * math.pi)
+        M = (L - varpi) % (2 * math.pi)  # mean anomaly
+        omega = (varpi - O) % (2 * math.pi)  # argument of periapsis (ω)
 
         el = OrbitalElements(a=a, e=e, i=I, Omega=O, omega=omega, M=M)
+        # radius (dist from foci), velocity in inertial frame
         r, v = elements_to_state(mu_sun, el)
 
-        # mass = MASS.get(name, MASS.get("Earth", 1.0))
-        # radius = RADIUS.get(name, RADIUS.get("Earth", 1.0))
         mass = phys[name.lower()]["mass"] if name.lower() in phys else default_mass
         radius = phys[name.lower()]["radius"] if name.lower() in phys else default_radius
 
