@@ -1,60 +1,64 @@
 from __future__ import annotations
 
-import math
+# import math
 
-AU_METERS = 1.495978707e11  # num meters in 1AU
-KG_SOLAR = 1.98847e30  # num kg in 1 solar mass
+from core.units import Unit, Meters, AU, Radians, Degrees, Kilograms, SolarMasses
+
+# AU_METERS = 1.495978707e11  # num meters in 1AU
+# KG_SOLAR = 1.98847e30  # num kg in 1 solar mass
 
 
-class Unit:
-    def __init__(self, value: float | int, unit: str):
-        self.value = float(value)
-        self.unit = unit
+# class Unit:
+#     def __init__(self, value: float | int, unit: str):
+#         self.value = float(value)
+#         self.unit = unit
     
-    def __repr__(self):
-        return f"{self.unit.upper()}({self.value})"
+#     def __repr__(self):
+#         return f"{self.unit.upper()}({self.value})"
 
-class Radians(Unit):
-    def __init__(self, value: float | int):
-        super().__init__(value, "radians")
+# class Radians(Unit):
+#     def __init__(self, value: float | int):
+#         value = value % (2 * math.pi)  # normalize
+#         super().__init__(value, "radians")
     
-    def to_degrees(self) -> float:
-        return Degrees(math.degrees(self.value))
+#     def to_degrees(self) -> float:
+#         return Degrees(math.degrees(self.value))
 
-class Degrees(Unit):
-    def __init__(self, value: float | int):
-        super().__init__(value, "degrees")
+# class Degrees(Unit):
+#     def __init__(self, value: float | int):
+#         value = value % 360  # normalize
+#         super().__init__(value, "degrees")
     
-    def to_radians(self) -> float:
-        return Radians(math.radians(self.value))
+#     def to_radians(self) -> float:
+#         return Radians(math.radians(self.value))
 
-class Meters(Unit):
-    def __init__(self, value: float | int):
-        super().__init__(value, "meters")
+# class Meters(Unit):
+#     def __init__(self, value: float | int):
+#         super().__init__(value, "meters")
     
-    def to_au(self) -> float:
-        return AU(self.value / AU_METERS)
+#     def to_au(self) -> float:
+#         return AU(self.value / AU_METERS)
 
-class AU(Unit):
-    def __init__(self, value: float | int):
-        super().__init__(value, "au")
+# class AU(Unit):
+#     def __init__(self, value: float | int):
+#         super().__init__(value, "au")
     
-    def to_meters(self) -> float:
-        return Meters(self.value * AU_METERS)
+#     def to_meters(self) -> float:
+#         return Meters(self.value * AU_METERS)
 
-class Kilograms(Unit):
-    def __init__(self, value: float | int):
-        super().__init__(value, "kilograms")
+# class Kilograms(Unit):
+#     def __init__(self, value: float | int):
+#         super().__init__(value, "kilograms")
     
-    def to_solar_masses(self) -> float:
-        return SolarMasses(self.value / KG_SOLAR)
+#     def to_solar_masses(self) -> float:
+#         return SolarMasses(self.value / KG_SOLAR)
 
-class SolarMasses(Unit):
-    def __init__(self, value: float | int):
-        super().__init__(value, "m_solar")
+# class SolarMasses(Unit):
+#     def __init__(self, value: float | int):
+#         super().__init__(value, "m_solar")
     
-    def to_kilograms(self) -> float:
-        return Kilograms(self.value * KG_SOLAR)
+#     def to_kilograms(self) -> float:
+#         return Kilograms(self.value * KG_SOLAR)
     
 
 class Dataset(object):
@@ -113,24 +117,30 @@ class Dataset(object):
         return [{k: v.value if isinstance(v, Unit) else v for k, v in row.items()} for row in self.data]
 
 
+# https://en.wikipedia.org/wiki/Orbital_elements
 def _make_keplerian_element(a, e, I, L, long_peri, long_node):
     """ Helper to convert from classical elements to our OrbitalElements dataclass."""
+    # note, we can derice ω and M from these, but we store as-is for clarity
+    # M = (L - ϖ) % (2 * math.pi)  # mean anomaly
+    # omega = (ϖ - Ω) % (2 * math.pi)  # argument of periapsis (ω)
     return {
         "a": AU(a),
         "e": e,
         "I": Degrees(I),
-        "L": Degrees(L),
-        "long.peri": Degrees(long_peri),
-        "long.node": Degrees(long_node)
+        "L": Degrees(L),  # mean longitude (defined as L = ϖ + M, where ϖ = Ω + ω, so L = Ω + ω + M)
+        "long.peri": Degrees(long_peri),  # longitude of periapsis (closest point, defied as ϖ = Ω + ω), rename varpi?
+        "long.node": Degrees(long_node),  # longitude of ascending node (defied as Ω),  rename Omega?
+        # "M": Radians((L - long_peri) % (2 * math.pi)),  # mean anomaly
+        # "omega": Radians((long_peri - long_node) % (2 * math.pi))  # argument of periapsis (ω)
     }
 
 # Source: NASA/JPL: https://ssd.jpl.nasa.gov/planets/approx_pos.html
 # with reference to to the mean ecliptic and equinox of J2000, valid for the time-interval 1800 AD - 2050 AD
-def solar_keplerian_elements():
+def solar_keplerian_elements(**kwargs):
     return Dataset([
         {"name": "Mercury", **_make_keplerian_element(0.38709927, 0.20563593, 7.00497902, 252.25032350, 77.45779628, 48.33076593)},
         {"name": "Venus", **_make_keplerian_element(0.72333566, 0.00677672, 3.39467605, 181.97909950, 131.60246718, 76.67984255)},
-        {"name": "EMB", **_make_keplerian_element(1.00000261, 0.01671123, -0.00001531, 100.46457166, 102.93768193, 0.0)},  # Earth Moon Barycenter
+        {"name": "Earth", **_make_keplerian_element(1.00000261, 0.01671123, -0.00001531, 100.46457166, 102.93768193, 0.0)},  # Earth Moon Barycenter
         {"name": "Mars", **_make_keplerian_element(1.52371034, 0.09339410, 1.84969142, -4.55343205, -23.94362959, 49.55953891)},
         {"name": "Jupiter", **_make_keplerian_element(5.20288700, 0.04838624, 1.30439695, 34.39644051, 14.72847983, 100.47390909)},
         {"name": "Saturn", **_make_keplerian_element(9.53667594, 0.05386179, 2.48599187, 49.95424423, 92.59887831, 113.66242448)},
@@ -148,25 +158,29 @@ def solar_keplerian_elements():
         {"name": "Makemake", **_make_keplerian_element(45.4494, 0.16194, 29.03386, 168.8258, 296.95, 79.259)},
         # https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=28978%20Ixion
         {"name": "28978 Ixion", **_make_keplerian_element(39.3745, 0.2449, 19.6745, 293.546, 300.585, 71.099)},
-    ])
+    ], **kwargs)
 
 
 # Source: NASA/JPL https://ssd.jpl.nasa.gov/planets/phys_par.html
-def solar_physical_properties():
+def solar_physical_properties(**kwargs):
     return Dataset([
         {"name": "Sun", "mass": Kilograms(1.9885e30), "radius": Meters(6.9634e8), "fg": 274.},
         {"name": "Mercury", "mass": Kilograms(3.3011e23), "radius": Meters(2.4397e6), "fg": 3.70},
         {"name": "Venus", "mass": Kilograms(4.8675e24), "radius": Meters(6.0518e6), "fg": 8.87},
-        {"name": "Earth", "mass": Kilograms(5.9722e24), "radius": Meters(6.3710e6), "fg": 9.80},
+        {"name": "Earth", "mass": Kilograms(5.9722e24), "radius": Meters(6.371e6), "fg": 9.80},
         {"name": "Mars", "mass": Kilograms(6.4171e23), "radius": Meters(3.3895e6), "fg": 3.71},
         {"name": "Jupiter", "mass": Kilograms(1.8982e27), "radius": Meters(6.9911e7), "fg": 24.79},
         {"name": "Saturn", "mass": Kilograms(5.6834e26), "radius": Meters(5.8232e7), "fg": 10.44},
         {"name": "Uranus", "mass": Kilograms(8.6810e25), "radius": Meters(2.5362e7), "fg": 8.87},
         {"name": "Neptune", "mass": Kilograms(1.02413e26), "radius": Meters(2.4622e7), "fg": 11.15},
-        {"name": "Pluto", "mass": Kilograms(13024.6e18), "radius": Meters(1188.3e4), "fg": 0.62},
-        {"name": "Ceres", "mass": Kilograms(938.416e18), "radius": Meters(469.7e4), "fg": 0.27},
-        {"name": "Eris", "mass": Kilograms(16600e18), "radius": Meters(1200.0e4), "fg": 0.77},
+        {"name": "Pluto", "mass": Kilograms(13024.6e18), "radius": Meters(1188300), "fg": 0.62},
+        {"name": "Ceres", "mass": Kilograms(938.416e18), "radius": Meters(469700), "fg": 0.27},
+        {"name": "Eris", "mass": Kilograms(16600e18), "radius": Meters(1163000), "fg": 0.77},
         {"name": "20000 Varuna", "mass": Kilograms(3.698e20), "radius": Meters(334000), "fg": 0.15},
         {"name": "Makemake", "mass": Kilograms(3100e18), "radius": Meters(714000), "fg": 0.4},
         {"name": "28978 Ixion", "mass": Kilograms(2.773e17), "radius": Meters(355000), "fg": 0.45},
-    ])
+    ], **kwargs)
+
+
+def solar_system():
+    ...
