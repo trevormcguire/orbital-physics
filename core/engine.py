@@ -14,14 +14,16 @@ class SimulationEngine:
         softening (float): Softening length to avoid singularities (in meters).
         history (dict): Stores positions of all objects at each step for plotting.
     """
-    def __init__(self, objects: ObjectCollection, dt: float = 1.0, softening: float = 0.0, restitution: float = 1.0):
+    def __init__(self, objects: ObjectCollection, dt: float = 1.0, softening: float = 0.0, restitution: float = 1.0, max_hist: int = -1):
         self.objects = objects
         self.dt = float(dt)
         self.softening = float(softening)
         self.restitution = float(restitution)
         self.history = {obj.uuid: [obj.position().copy().tolist()] for obj in self.objects}
+        self.max_hist = max_hist
         # initial accelerations
         self.acc, self.last_potential = pairwise_accelerations(self.objects.objects, eps=self.softening)
+        self.time_elapsed = float(dt)
 
     def named_history(self, limit: int = 0):
         """Return history with object names as keys instead of UUIDs."""
@@ -52,8 +54,13 @@ class SimulationEngine:
         self.objects.handle_collisions(restitution=self.restitution)
 
         # Record
+        use_queue = self.max_hist is not None
         for obj in self.objects:
             self.history[obj.uuid].append(obj.position().copy().tolist())
+            if use_queue and (len(self.history[obj.uuid]) > self.max_hist):
+                self.history[obj.uuid].pop(0)
+
+        self.time_elapsed += dt
 
     def run(self, steps: int):
         for _ in range(int(steps)):
@@ -78,6 +85,14 @@ class SimulationEngine:
             L += np.cross(r, p)
             # add spin angular momentum if modeling rigid bodies: L += I·ω in body frame
         return L
+    
+    # def save_state(self) -> dict:
+    #     """Return a JSON-serializable snapshot of the current state."""
+    #     return {
+    #         "time_elapsed": self.time_elapsed,
+    #         "objects": [obj.to_dict() for obj in self.objects],
+    #         "history": self.named_history(limit=1),  # only latest position
+    #     }
 
 
 def run_simulation(engine: SimulationEngine, steps: int, print_every: int = 100):
