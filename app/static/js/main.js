@@ -46,7 +46,6 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setClearColor(0xffffff, 1);
 
 const scene = new THREE.Scene();
-
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.01, 1e8);
 camera.up.set(0, 0, 1);
 camera.position.set(0, -40, 24);
@@ -222,10 +221,40 @@ class Body {
     this.sprite.scale.set(worldSize, worldSize, 1);
   }
 
+//   setTrailFromHistory(historyArr) {
+//     if (!historyArr || historyArr.length === 0) return;
+//     this.trailMeters.length = 0;
+//     for (let i = 0; i < historyArr.length && this.trailMeters.length < TRAIL_MAX; ++i) {
+//       const e = historyArr[i];
+//       let hx, hy, hz;
+//       if (Array.isArray(e) && e.length >= 3) {
+//         [hx, hy, hz] = e;
+//       } else if (e && typeof e === "object" && "x" in e && "y" in e && "z" in e) {
+//         ({ x: hx, y: hy, z: hz } = e);
+//       } else {
+//         continue;
+//       }
+//       this.trailMeters.push(new THREE.Vector3(hx, hy, hz));
+//     }
+//     if (this.trailMeters.length === 0) return;
+
+//     const last = this.trailMeters[this.trailMeters.length - 1];
+//     this.lastMeters.copy(last);
+//     this._prevMeters.copy(last);
+//     this._nextMeters.copy(last);
+//     this._currMeters.copy(last);
+//     // Immediate projection
+//     const worldPos = metersToWorldVec(last.x, last.y, last.z);
+//     this.sprite.position.copy(worldPos);
+//     this._updateTrailGeometry(); // projects with current transform
+//   }
   setTrailFromHistory(historyArr) {
     if (!historyArr || historyArr.length === 0) return;
     this.trailMeters.length = 0;
-    for (let i = 0; i < historyArr.length && this.trailMeters.length < TRAIL_MAX; ++i) {
+
+    // ensure we take the most recent TRAIL_MAX samples (not the earliest)
+    const start = Math.max(0, historyArr.length - TRAIL_MAX);
+    for (let i = start; i < historyArr.length && this.trailMeters.length < TRAIL_MAX; ++i) {
       const e = historyArr[i];
       let hx, hy, hz;
       if (Array.isArray(e) && e.length >= 3) {
@@ -249,7 +278,6 @@ class Body {
     this.sprite.position.copy(worldPos);
     this._updateTrailGeometry(); // projects with current transform
   }
-
   setImmediatePositionMeters(mx, my, mz) {
     this.lastMeters.set(mx, my, mz);
     this._prevMeters.set(mx, my, mz);
