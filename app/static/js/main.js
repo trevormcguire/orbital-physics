@@ -538,6 +538,16 @@ function bootstrapInitial() {
       body.setImmediatePositionMeters(b.position.x, b.position.y, b.position.z);
     }
   }
+  // temporarily set sol to the focus body if present
+  const fb = Array.from(bodies.values()).find(x => x.name && x.name.toLowerCase() === "sol");
+  if (fb) {
+    focusBodyId = fb.id;
+    targetOrigin.copy(fb.lastMeters);
+    // update select UI if present
+    try { focusSelect.value = focusBodyId; } catch (e) {}
+    // optional flash to show selection
+    flashSingleBody(fb);
+  }
 }
 
 /* ----------------------- Hover & focus ----------------------- */
