@@ -161,6 +161,8 @@ class Body:
         See "Mean Motion and Kepler's Laws" https://en.wikipedia.org/wiki/Mean_motion
         for derivation.
         """
+        if self.parent is None:
+            return 0.
         a = (self.a.to_meters() if isinstance(self.a, AU) else self.a).value
         n = math.sqrt(self.parent.mu / a**3)
         return n
