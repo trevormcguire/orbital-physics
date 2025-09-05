@@ -151,6 +151,19 @@ const fmtSci = (n) => {
 };
 function metersToMkm(m) { return m / 1e9; }
 
+function formatPeriod(sec) {
+  if (sec == null || !isFinite(sec)) return "—";
+  if (sec < 60) return `${Math.round(sec)} s`;
+  if (sec < 3600) return `${(sec/60).toFixed(1)} min`;
+  if (sec < 86400) return `${(sec/3600).toFixed(2)} h`;
+  if (sec < 31557600) return `${(sec/86400).toFixed(2)} d`;
+  return `${(sec/31557600).toFixed(3)} yr`;
+}
+function formatFg(g) {
+  if (g == null || !isFinite(g)) return "—";
+  return `${fmt3(g)} m/s²`;
+}
+
 /* ---------------- meters -> world transform helpers ---------------- */
 function metersToWorldVec(mx, my, mz) {
   const sx = (mx - dynamicOrigin.x) * dynamicScale;
@@ -476,6 +489,10 @@ async function fetchState() {
     let body = bodies.get(b.id);
     if (!body) {
       body = new Body(b.id, b.name, b.radius_km, b.mass_kg);
+      // update metadata
+      body.T_seconds = b.T_seconds ?? body.T_seconds;
+      body.fg_ms2 = b.fg_ms2 ?? body.fg_ms2;
+
       bodies.set(b.id, body);
       body.setScale(radiusScaler(b.radius_km));
 
@@ -488,6 +505,10 @@ async function fetchState() {
         body.setImmediatePositionMeters(b.position.x, b.position.y, b.position.z);
       }
     } else {
+      // update metadata
+      body.T_seconds = b.T_seconds ?? body.T_seconds;
+      body.fg_ms2 = b.fg_ms2 ?? body.fg_ms2;
+
       body.radiusKm = b.radius_km;
       body.massKg = b.mass_kg;
       body.setScale(radiusScaler(b.radius_km));
@@ -516,6 +537,16 @@ function bootstrapInitial() {
     } else {
       body.setImmediatePositionMeters(b.position.x, b.position.y, b.position.z);
     }
+  }
+  // temporarily set sol to the focus body if present
+  const fb = Array.from(bodies.values()).find(x => x.name && x.name.toLowerCase() === "sol");
+  if (fb) {
+    focusBodyId = fb.id;
+    targetOrigin.copy(fb.lastMeters);
+    // update select UI if present
+    try { focusSelect.value = focusBodyId; } catch (e) {}
+    // optional flash to show selection
+    flashSingleBody(fb);
   }
 }
 
@@ -556,6 +587,9 @@ function onPointerMove(ev) {
       <span class="kv">r = ${fmtInt(body.radiusKm)} km</span> •
       <span class="kv">m = ${fmtSci(body.massKg)} kg</span> •
       <span class="kv">d = ${fmt3(metersToMkm(dist_m))} Mkm</span>
+      <br/>
+      <span class="kv">T = ${formatPeriod(body.T_seconds)}</span> •
+      <span class="kv">g = ${formatFg(body.fg_ms2)}</span>
     `;
     const px = ev.clientX + 12;
     const py = ev.clientY + 12;

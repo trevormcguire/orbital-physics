@@ -8,66 +8,46 @@ from datetime import datetime, timezone, timedelta
 from flask import Flask, jsonify, render_template
 
 from core.engine import SimulationEngine, run_simulation
-from core.sol import OrbitalElements, elements_to_state, J2000_JD, JULIAN_DAY
+from core.sol import J2000_JD, JULIAN_DAY
 from core.physics import Object, Coordinates, ObjectCollection
-from core.units import Unit
 
 
-
-def generate_engine_v2(
+def generate_engine_v3(
     dt: float,
     max_hist: int = None,
-    include_sun: bool = True,
 ):
-    from core.datasets import solar_system, G
+    from core.datasets import solar_system_v2, System
 
-    data = solar_system(moons=False).convert_types(
+    system: System = solar_system_v2(moons=False)
+    system.standardize_units(
         mass_unit="kilograms",
         distance_unit="meters",
-        angle_unit="radians"
+        angle_unit="radians",
+        time_unit="seconds"
     )
-
-    sol: dict[str, Unit] = data.pop("Sol")
-    mu_sun = G * sol["mass"].value
     bodies = []
-    if include_sun:
-        sun = Object(
-            mass=sol["mass"].value,
-            radius=sol["radius"].value,
-            velocity=np.zeros(3),
-            coordinates=Coordinates(0.0, 0.0, 0.0),
-            name="Sol"
-        )
-        bodies.append(sun)
-    for body in data.data:
-        el = OrbitalElements(
-            a=float(body["a"].value),
-            e=float(body["e"]),
-            i=float(body["I"].value),
-            Omega=float(body["long.node"].value),
-            omega=float(body["arg.peri"].value),
-            M=float(body["M"].value)
-        )
-        # radius (dist from foci), velocity in inertial frame
-        r, v = elements_to_state(mu_sun, el)
+    for body in system:
+        r, v = body.get_state()
         bodies.append(
             Object(
-                mass=body["mass"].value,
-                radius=body["radius"].value,
-                velocity=v.astype(np.float64),
-                coordinates=Coordinates(*r.tolist()),
-                name=body["name"]
+                mass=body.mass.value,
+                radius=body.radius.value,
+                velocity=np.array(v, dtype=np.float64),
+                coordinates=Coordinates(*r),
+                name=body.name
             )
         )
     collection = ObjectCollection(bodies)
-    return SimulationEngine(collection, dt=dt, softening=1e6, restitution=1.0, max_hist=max_hist)
-
+    engine = SimulationEngine(collection, dt=dt, softening=1e6, restitution=1.0, max_hist=max_hist)
+    engine.body_map = {b.name: b for b in system.bodies}
+    engine.system = system
+    return engine
 
 INTERVAL = 3600.  # 1 hour
 INITIAL_STEPS = 5000  # hours to warm up with
 MAX_HISTORY = 50000
 # 1-hour timestep; softening to avoid singularities if needed
-engine = generate_engine_v2(dt=INTERVAL, max_hist=MAX_HISTORY, include_sun=True)  # each frame is 1 hour
+engine = generate_engine_v3(dt=INTERVAL, max_hist=MAX_HISTORY)  # each frame is 1 hour
 epoch_ts = (J2000_JD - 2440587.5) * JULIAN_DAY  # seconds since Unix epoch
 engine.sim_epoch = datetime.fromtimestamp(epoch_ts, tz=timezone.utc)
 engine.sim_epoch_jd = float(J2000_JD)
@@ -99,6 +79,14 @@ thread = threading.Thread(target=engine_loop, daemon=True)
 thread.start()
 
 def get_bodies():
+    def unwrap_unit(val):
+        # return a plain float when possible
+        try:
+            if hasattr(val, "value"):
+                return float(val.value)
+            return float(val)
+        except Exception:
+            return None
     bodies = []
     masses = []
     radii_km = []
@@ -108,11 +96,15 @@ def get_bodies():
         pos_world = (pos_m * WORLD_SCALE)    # AU for the viewer
         r_km = float(obj.radius) / 1000.0
 
+        obj_body = engine.body_map.get(obj.name)
+
         bodies.append({
             "id": obj.uuid,
             "name": obj.name,
             "mass_kg": float(obj.mass),
             "radius_km": r_km,
+            "T_seconds": unwrap_unit(obj_body.T),
+            "fg_ms2": obj_body.fg,
             "position": {
                 "x": float(pos_world[0]),
                 "y": float(pos_world[1]),
