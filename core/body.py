@@ -162,11 +162,12 @@ class Body:
         for derivation.
         """
         a = (self.a.to_meters() if isinstance(self.a, AU) else self.a).value
-        n = math.sqrt(self.mu / a**3)
+        n = math.sqrt(self.parent.mu / a**3)
         return n
 
     def get_state(self):
-        """Return position and velocity vectors in meters and m/s.
+        """Return position and velocity vectors (r, v) in meters and m/s
+        with the inertial frame given standard Keplerian elements
         https://en.wikipedia.org/wiki/Kepler%27s_equation
         """
         from core.sol import solve_kepler
@@ -181,62 +182,125 @@ class Body:
         Omega = (self.long_node.to_radians() if isinstance(self.long_node, Degrees) else self.long_node).value
         omega = (self.arg_peri.to_radians() if isinstance(self.arg_peri, Degrees) else self.arg_peri).value
         b = (self.b.to_meters() if isinstance(self.b, AU) else self.b).value
+        n = self.mean_motion()
 
         E = solve_kepler(M, self.e)  # a point on the ellipse
         cos_E, sin_E = math.cos(E), math.sin(E)
         
+        # compute position in the orbital/perifocal plane [x_op, y_op, 0]
         x_op = a * (cos_E - self.e)
         y_op = b * sin_E
-
-        n = self.mean_motion()
-
+        # velocity in orbital plane [v_x_op, v_y_op, 0]
         vx_op = -a * n * sin_E / (1 - self.e * cos_E)
         vy_op =  a * n * math.sqrt(1 - self.e**2) * cos_E / (1 - self.e * cos_E)
 
-        # rotate by argument of periapsis, inclination, longitude of node
+        # rotate coordinates from the orbital (perifocal) frame into the inertial frame
+        # using R = Rz(Ω) * Rx(i) * Rz(ω)
+        # Rz(ω): rotate by argument of periapsis ω around z (aligns periapsis).
+        # Rx(i): rotate by inclination i around x (tilts the plane)
+        # Rz(Ω): rotate by longitude of ascending node Ω around z (orient node).
         cw, sw = math.cos(omega), math.sin(omega)
         ci, si = math.cos(I), math.sin(I)
         cO, sO = math.cos(Omega), math.sin(Omega)
-
-        # rotation matrix R = Rz(O) * Rx(i) * Rz(w)
+        # rotation matrix R = Rz(Ω) · Rx(i) · Rz(ω)
+        # R = [[ cO*cw - sO*sw*ci,  -cO*sw - sO*cw*ci,  sO*si ],
+        #      [ sO*cw + cO*sw*ci,  -sO*sw + cO*cw*ci, -cO*si ],
+        #      [            sw*si,             cw*si,        ci ]]
         R11 = cO*cw - sO*sw*ci
         R12 = -cO*sw - sO*cw*ci
-        # R13 = sO*si
+        R13 = sO*si
         R21 = sO*cw + cO*sw*ci
         R22 = -sO*sw + cO*cw*ci
-        # R23 = -cO*si
+        R23 = -cO*si
         R31 = sw*si
         R32 = cw*si
-        # R33 = ci
-
-        r = [R11*x_op + R12*y_op, R21*x_op + R22*y_op, R31*x_op + R32*y_op]
-        v = [R11*vx_op + R12*vy_op, R21*vx_op + R22*vy_op, R31*vx_op + R32*vy_op]
+        R33 = ci
+        
+        # perifocal z is zero, but use full matrix for clarity
+        # inertial position r = R · r_pf
+        r = [
+            R11 * x_op + R12 * y_op + R13 * 0.0,
+            R21 * x_op + R22 * y_op + R23 * 0.0,
+            R31 * x_op + R32 * y_op + R33 * 0.0,
+        ]
+        # inertial velocity v = R · v_pf
+        v = [
+            R11 * vx_op + R12 * vy_op + R13 * 0.0,
+            R21 * vx_op + R22 * vy_op + R23 * 0.0,
+            R31 * vx_op + R32 * vy_op + R33 * 0.0,
+        ]
+        # r = [R11*x_op + R12*y_op, R21*x_op + R22*y_op, R31*x_op + R32*y_op]
+        # v = [R11*vx_op + R12*vy_op, R21*vx_op + R22*vy_op, R31*vx_op + R32*vy_op]
         return r, v
 
 
-
 class System:
-    """A flattened collection of bodies."""
-    def __init__(self, bodies: list[Body]):
+    """A collection of bodies and subsystems."""
+    def __init__(
+        self,
+        bodies: list[Body],
+        distance_unit: str = "meters",
+        mass_unit: str = "kg",
+        angle_unit: str = "radians",
+        time_unit: str = "seconds"
+    ):
         self.bodies = bodies
-    
+        self.distance_unit = distance_unit
+        self.mass_unit = mass_unit
+        self.angle_unit = angle_unit
+        self.time_unit = time_unit
+
     def __getitem__(self, idx: int) -> Body:
         return self.bodies[idx]
 
-#         self._names = [body.name.lower() for body in bodies]
-    
-#     def to_dict(self):
-#         return {body.name: body.to_dict() for body in self.bodies}
-    
-#     def to_json(self):
-#         return {body.name: body.to_json() for body in self.bodies}
-    
-#     def __repr__(self):
-#         return f"System({self.bodies})"
+    def __len__(self) -> int:
+        return len(self.bodies)
 
-#     def values(self):
-#         return self.to_json()
+    def __repr__(self):
+        return f"System({self.bodies})"
+
+    def to_dict(self):
+        return {body.name: body.to_dict() for body in self.bodies}
     
+    def to_json(self):
+        return {body.name: body.to_json() for body in self.bodies}
+    
+    def values(self):
+        return self.to_json()
+
+    def _convert(self, value):
+        if not isinstance(value, Unit):
+            return value
+        if isinstance(value, Meters) and self.distance_unit == "au":
+            return value.to_au()
+        if isinstance(value, AU) and self.distance_unit == "meters":
+            return value.to_meters()
+        if isinstance(value, Radians) and self.angle_unit == "degrees":
+            return value.to_degrees()
+        if isinstance(value, Degrees) and self.angle_unit == "radians":
+            return value.to_radians()
+        if isinstance(value, Kilograms) and self.mass_unit == "m_solar":
+            return value.to_solar_masses()
+        if isinstance(value, SolarMasses) and self.mass_unit == "kilograms":
+            return value.to_kilograms()
+        if isinstance(value, Seconds) and self.time_unit == "days":
+            return value.to_days()
+        if isinstance(value, Days) and self.time_unit == "seconds":
+            return value.to_seconds()
+        return value
+
+    def standardize_units(self, distance_unit: str = None, mass_unit: str = None, angle_unit: str = None, time_unit: str = None):
+        """in-place conversion of all bodies to the specified units."""
+        self.distance_unit = distance_unit or self.distance_unit
+        self.mass_unit = mass_unit or self.mass_unit
+        self.angle_unit = angle_unit or self.angle_unit
+        self.time_unit = time_unit or self.time_unit
+
+        for body in self.bodies:
+            for attr_name, attr in body.__dict__.items():
+                attr = self._convert(attr)
+                setattr(body, attr_name, attr)
+
 #     def _get_index(self, name: str):
 #         name = name.lower()
 #         if name not in self._names:
