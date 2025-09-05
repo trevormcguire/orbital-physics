@@ -302,25 +302,3 @@ class System:
             for attr_name, attr in body.__dict__.items():
                 attr = self._convert(attr)
                 setattr(body, attr_name, attr)
-
-#     def _get_index(self, name: str):
-#         name = name.lower()
-#         if name not in self._names:
-#             return None
-#         return self._names.index(name)
-
-#     def get(self, name: str):
-#         idx = self._get_index(name)
-#         return self.bodies[idx] if idx is not None else None
-    
-#     def pop(self, name: str) -> dict | Body | None:
-#         """Remove and return a body by name, or None if not found."""
-#         idx = self._get_index(name)
-#         return self.bodies.pop(idx) if idx is not None else None
-
-#     def add(self, body: Body):
-#         """Add a body to the system."""
-#         if self._get_index(body.name) is not None:
-#             raise ValueError(f"Body with name '{body.name}' already exists in system.")
-#         self.bodies.append(body)
-#         self._names.append(body.name.lower())

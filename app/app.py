@@ -8,67 +8,15 @@ from datetime import datetime, timezone, timedelta
 from flask import Flask, jsonify, render_template
 
 from core.engine import SimulationEngine, run_simulation
-from core.sol import OrbitalElements, elements_to_state, J2000_JD, JULIAN_DAY
+from core.sol import J2000_JD, JULIAN_DAY
 from core.physics import Object, Coordinates, ObjectCollection
-from core.units import Unit
-from core.body import Body
-
-
-# def generate_engine_v2(
-#     dt: float,
-#     max_hist: int = None,
-#     include_sun: bool = True,
-# ):
-#     from core.datasets import solar_system, G
-    
-
-#     data = solar_system(moons=False).convert_types(
-#         mass_unit="kilograms",
-#         distance_unit="meters",
-#         angle_unit="radians"
-#     )
-
-#     sol: dict[str, Unit] = data.pop("Sol")
-#     mu_sun = G * sol["mass"].value
-#     bodies = []
-#     if include_sun:
-#         sun = Object(
-#             mass=sol["mass"].value,
-#             radius=sol["radius"].value,
-#             velocity=np.zeros(3),
-#             coordinates=Coordinates(0.0, 0.0, 0.0),
-#             name="Sol"
-#         )
-#         bodies.append(sun)
-#     for body in data.data:
-#         el = OrbitalElements(
-#             a=float(body["a"].value),
-#             e=float(body["e"]),
-#             i=float(body["I"].value),
-#             Omega=float(body["long.node"].value),
-#             omega=float(body["arg.peri"].value),
-#             M=float(body["M"].value)
-#         )
-#         # radius (dist from foci), velocity in inertial frame
-#         r, v = elements_to_state(mu_sun, el)
-#         bodies.append(
-#             Object(
-#                 mass=body["mass"].value,
-#                 radius=body["radius"].value,
-#                 velocity=v.astype(np.float64),
-#                 coordinates=Coordinates(*r.tolist()),
-#                 name=body["name"]
-#             )
-#         )
-#     collection = ObjectCollection(bodies)
-#     return SimulationEngine(collection, dt=dt, softening=1e6, restitution=1.0, max_hist=max_hist)
 
 
 def generate_engine_v3(
     dt: float,
     max_hist: int = None,
 ):
-    from core.datasets import solar_system_v2, G, System
+    from core.datasets import solar_system_v2, System
 
     system: System = solar_system_v2(moons=False)
     system.standardize_units(
@@ -96,7 +44,6 @@ INTERVAL = 3600.  # 1 hour
 INITIAL_STEPS = 5000  # hours to warm up with
 MAX_HISTORY = 50000
 # 1-hour timestep; softening to avoid singularities if needed
-# engine = generate_engine_v2(dt=INTERVAL, max_hist=MAX_HISTORY, include_sun=True)  # each frame is 1 hour
 engine = generate_engine_v3(dt=INTERVAL, max_hist=MAX_HISTORY)  # each frame is 1 hour
 epoch_ts = (J2000_JD - 2440587.5) * JULIAN_DAY  # seconds since Unix epoch
 engine.sim_epoch = datetime.fromtimestamp(epoch_ts, tz=timezone.utc)
