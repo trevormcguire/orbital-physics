@@ -23,7 +23,7 @@ const FLASH_DURATION_MS = 1000;
 const FLASH_INTERVAL_MS = FLASH_DURATION_MS / 5;
 
 const API_POLL_MS = 1000;
-const TRAIL_MAX = 1000;
+const TRAIL_MAX = 5000;
 // const AU_METERS = 1.495978707e11;
 // const BACKEND_SENDS_AU = true;
 
@@ -254,7 +254,7 @@ class Body {
 
     // ensure we take the most recent TRAIL_MAX samples (not the earliest)
     const start = Math.max(0, historyArr.length - TRAIL_MAX);
-    for (let i = start; i < historyArr.length && this.trailMeters.length < TRAIL_MAX; ++i) {
+    for (let i = start; i < historyArr.length; ++i) {
       const e = historyArr[i];
       let hx, hy, hz;
       if (Array.isArray(e) && e.length >= 3) {
@@ -670,6 +670,116 @@ function updateDynamicTransform() {
   }
 }
 
+
+/* -------------------- Focus selector UI -------------------- */
+// const focusPanel = document.getElementById("focusPanel");
+const focusSelect = document.getElementById("focusSelect");
+const focusSearch = document.getElementById("focusSearch");
+const clearFocusBtn = document.getElementById("clearFocusBtn");
+
+function rebuildFocusList(filter = "") {
+  const list = Array.from(bodies.values()).sort((a, b) => a.name.localeCompare(b.name));
+  const f = filter.trim().toLowerCase();
+  focusSelect.innerHTML = "";
+  for (const b of list) {
+    if (f && !b.name.toLowerCase().includes(f)) continue;
+    const opt = document.createElement("option");
+    opt.value = b.id;
+    opt.textContent = b.name;
+    focusSelect.appendChild(opt);
+  }
+  // keep select synced with current focus
+  if (focusBodyId) {
+    focusSelect.value = focusBodyId;
+  } else {
+    focusSelect.selectedIndex = -1;
+  }
+}
+
+focusSelect.addEventListener("change", () => {
+  const id = focusSelect.value || null;
+  focusBodyId = id;
+  const fb = getFocusedBody();
+  if (fb) {
+    targetOrigin.copy(fb.lastMeters);
+    flashSingleBody(fb);
+  } else {
+    targetOrigin.copy(sceneCenter);
+  }
+});
+function flashSingleBody(body) {
+  if (!body) return;
+  try {
+    const orig = body.sprite.scale.clone();
+    const prevDepthTest = body.sprite.material.depthTest ?? true;
+    const prevRenderOrder = body.sprite.renderOrder ?? 0;
+
+    // scale for visual flash (use baseScale so single-body flash is proportional)
+    // const size = Math.max(body.baseScale, 1.0);
+    let maxSize = 0;
+    bodies.forEach(b => { if (b.baseScale > maxSize) maxSize = b.baseScale; });
+    if (maxSize <= 0) { isFlashing = false; return; }
+    let size = maxSize;
+
+    body.sprite.material.depthTest = false;
+    body.sprite.renderOrder = 998;
+    body.sprite.scale.set(size, size, 1);
+    body.flashColor("#000", FLASH_DURATION_MS * 1.5);
+
+    const mat = new THREE.SpriteMaterial({
+      map: FLASH_TEX,
+      transparent: true,
+      opacity: 1.0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      depthTest: false
+    });
+    const s = new THREE.Sprite(mat);
+    s.position.copy(body.sprite.position);
+    s.scale.set(size, size, 1);
+    s.renderOrder = 999;
+    scene.add(s);
+
+    activeFlashes.push({ sprite: s, start: performance.now(), body, orig, prevDepthTest, prevRenderOrder });
+
+    // restore original sprite properties after duration
+    setTimeout(() => {
+      try {
+        if (body.sprite) {
+          body.sprite.scale.copy(orig);
+          body.sprite.material.depthTest = prevDepthTest;
+          body.sprite.renderOrder = prevRenderOrder;
+        }
+      } catch (e) {}
+    }, FLASH_DURATION_MS);
+  } catch (e) {}
+}
+
+focusSearch.addEventListener("input", () => {
+  rebuildFocusList(focusSearch.value);
+});
+
+clearFocusBtn.addEventListener("click", () => {
+  focusBodyId = null;
+  targetOrigin.copy(sceneCenter);
+  focusSelect.selectedIndex = -1;
+  focusSearch.value = "";
+  rebuildFocusList();
+});
+
+// Ensure the list is populated after bootstrap and after each fetch update
+const orig_bootstrapInitial = bootstrapInitial;
+bootstrapInitial = function() {
+  orig_bootstrapInitial();
+  rebuildFocusList();
+};
+
+const orig_fetchState = fetchState;
+fetchState = async function() {
+  await orig_fetchState();
+  rebuildFocusList(focusSearch.value);
+};
+
 /* ----------------------- Render loop ----------------------- */
 function onResize() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -729,4 +839,4 @@ if (flashBtn) {
   flashBtn.addEventListener("click", () => { triggerFlash(); });
 }
 
-// window.onload = () => {triggerFlash();};
+window.onload = () => {triggerFlash();};

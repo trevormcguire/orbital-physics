@@ -85,6 +85,14 @@ class SimulationEngine:
             L += np.cross(r, p)
             # add spin angular momentum if modeling rigid bodies: L += I·ω in body frame
         return L
+    
+    # def save_state(self) -> dict:
+    #     """Return a JSON-serializable snapshot of the current state."""
+    #     return {
+    #         "time_elapsed": self.time_elapsed,
+    #         "objects": [obj.to_dict() for obj in self.objects],
+    #         "history": self.named_history(limit=1),  # only latest position
+    #     }
 
 
 def run_simulation(engine: SimulationEngine, steps: int, print_every: int = 100):
