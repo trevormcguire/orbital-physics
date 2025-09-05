@@ -1,3 +1,6 @@
+"""Module to allow easy conversion between different units commonly used in orbital mechanics."""
+from __future__ import annotations
+
 import math
 
 
@@ -67,3 +70,17 @@ class SolarMasses(Unit):
 
     def to_kilograms(self):
         return Kilograms(self.value * KG_SOLAR)
+
+class Seconds(Unit):
+    def __init__(self, value: float | int):
+        super().__init__(value, "seconds")
+    
+    def to_days(self):
+        return Days(self.value / 86400.)
+    
+class Days(Unit):
+    def __init__(self, value: float | int):
+        super().__init__(value, "days")
+    
+    def to_seconds(self):
+        return Seconds(self.value * 86400.)
