@@ -38,7 +38,10 @@ def generate_engine_v3(
             )
         )
     collection = ObjectCollection(bodies)
-    return SimulationEngine(collection, dt=dt, softening=1e6, restitution=1.0, max_hist=max_hist)
+    engine = SimulationEngine(collection, dt=dt, softening=1e6, restitution=1.0, max_hist=max_hist)
+    engine.body_map = {b.name: b for b in system.bodies}
+    engine.system = system
+    return engine
 
 INTERVAL = 3600.  # 1 hour
 INITIAL_STEPS = 5000  # hours to warm up with
@@ -76,6 +79,14 @@ thread = threading.Thread(target=engine_loop, daemon=True)
 thread.start()
 
 def get_bodies():
+    def unwrap_unit(val):
+        # return a plain float when possible
+        try:
+            if hasattr(val, "value"):
+                return float(val.value)
+            return float(val)
+        except Exception:
+            return None
     bodies = []
     masses = []
     radii_km = []
@@ -85,11 +96,15 @@ def get_bodies():
         pos_world = (pos_m * WORLD_SCALE)    # AU for the viewer
         r_km = float(obj.radius) / 1000.0
 
+        obj_body = engine.body_map.get(obj.name)
+
         bodies.append({
             "id": obj.uuid,
             "name": obj.name,
             "mass_kg": float(obj.mass),
             "radius_km": r_km,
+            "T_seconds": unwrap_unit(obj_body.T),
+            "fg_ms2": obj_body.fg,
             "position": {
                 "x": float(pos_world[0]),
                 "y": float(pos_world[1]),
