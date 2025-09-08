@@ -471,8 +471,8 @@ function updateSimTimeFromPayload(payload) {
   if (!simTime | !timeElapsed) return;
     if (payload?.time_elapsed != null) {
       const days = (payload.time_elapsed / 86400).toFixed(2);
-      timeElapsed.textContent = `time elapsed: ${days} d`;
-      simTime.textContent = `sim time: ${payload.sim_time_iso}`;
+      timeElapsed.textContent = `elapsed: ${days} d`;
+      simTime.textContent = `time: ${payload.sim_time_iso}`;
 
     }
 }

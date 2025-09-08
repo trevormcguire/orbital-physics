@@ -160,7 +160,7 @@
   <!-- Combined control panel -->
   <div id="controls" role="region" aria-label="Controls">
     <div class="header">
-      <div class="title">Controls</div>
+      <div class="title">Settings</div>
       <button id="flashBtn" title="Flash bodies" aria-label="Flash">⚡</button>
     </div>
 
@@ -170,8 +170,11 @@
   </div>
 
   <div id="timeInfo" class="time-info" title="Simulation time (UTC)">
-    <div id="simTime">--</div>
+    <div>system: {{ system }}</div>
     <div id="timeElapsed" title="Time Elapsed (Days)">--</div>
+    <div id="simTime">--</div>
+    
+    
   </div>
   <div id="appVersion" aria-hidden="true">v{{ version }}</div>
 

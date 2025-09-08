@@ -150,7 +150,8 @@ def index():
         "index.html",
         initial_state=world_hist,
         bodies=get_bodies(),
-        version=CONFIG["version"]
+        version=CONFIG["version"],
+        system="sol"
     )
 
 @app.route("/api/state")
