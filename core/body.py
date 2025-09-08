@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 
 from core.constants import STANDARD
+from core.physics import solve_kepler, moment_of_inertia
 from core.units import Unit, Meters, AU, Radians, Degrees, Kilograms, SolarMasses, Seconds, Days
 
 
@@ -166,13 +167,25 @@ class Body:
         a = (self.a.to_meters() if isinstance(self.a, AU) else self.a).value
         n = math.sqrt(self.parent.mu / a**3)
         return n
+    
+    def rotational_intertia(self):
+        """The moment of inertia I is also defined as the
+        ratio of the net angular momentum L of a system to its angular velocity ω around a rotational axis.
+
+        It is the ratio between the torque applied
+        and the resulting angular acceleration about that axis,
+        where torque is the rotational analogue of linear force
+        (determines the rate of change of the body's angular momentum).
+        """
+        mass = self.mass.to_kilograms() if isinstance(self.mass, SolarMasses) else self.mass.value
+        radius = self.radius.to_meters() if isinstance(self.radius, AU) else self.radius.value
+        return moment_of_inertia(mass, radius, shape="sphere")
 
     def get_state(self):
         """Return position and velocity vectors (r, v) in meters and m/s
         with the inertial frame given standard Keplerian elements
         https://en.wikipedia.org/wiki/Kepler%27s_equation
         """
-        from core.sol import solve_kepler
         if self.parent is None:
             return [0., 0., 0.], [0., 0., 0.]  # origin
             # raise ValueError("Cannot compute state for body without parent.")
@@ -302,3 +315,58 @@ class System:
             for attr_name, attr in body.__dict__.items():
                 attr = self._convert(attr)
                 setattr(body, attr_name, attr)
+
+    # def hierarchical_accelerations(self, eps: float = 0.0, unit_profile=STANDARD):
+    #     """
+    #     Calculate accelerations in a hierarchical manner, prioritizing parent-child relationships.
+
+    #     Args:
+    #         eps (float): Softening parameter to avoid singularities.
+    #         unit_profile (UnitProfile): Unit profile for gravitational constant.
+
+    #     Returns:
+    #         dict: A dictionary mapping each body's UUID to its acceleration vector.
+    #     """
+    #     import numpy as np
+
+    #     acc = {body.name: np.zeros(3) for body in self.bodies}
+    #     U = 0.0  # Total potential energy
+    #     eps2 = eps * eps
+
+    #     # First, calculate accelerations due to parent-child relationships
+    #     for body in self.bodies:
+    #         if body.parent is not None:
+    #             r = np.array(body.get_state()[0]) - np.array(body.parent.get_state()[0])
+    #             r2 = float(r @ r) + eps2
+    #             inv_r = 1. / (r2**0.5)
+    #             inv_r3 = inv_r / r2  # 1/r^3 with softening
+
+    #             # Acceleration due to parent
+    #             a = unit_profile.G * body.parent.mass.value * inv_r3 * r
+    #             acc[body.name] += a
+    #             acc[body.parent.name] -= a  # Newton's third law
+
+    #             # Potential energy (count each pair once)
+    #             U += -unit_profile.G * body.mass.value * body.parent.mass.value * inv_r
+
+    #     # Next, calculate accelerations due to other bodies (e.g., Sun's influence on moons)
+    #     for i, body_i in enumerate(self.bodies):
+    #         for j, body_j in enumerate(self.bodies):
+    #             if i >= j:
+    #                 continue  # Avoid double-counting pairs
+
+    #             r = np.array(body_j.get_state()[0]) - np.array(body_i.get_state()[0])
+    #             r2 = float(r @ r) + eps2
+    #             inv_r = 1. / (r2**0.5)
+    #             inv_r3 = inv_r / r2  # 1/r^3 with softening
+
+    #             # Acceleration contributions
+    #             a_i = unit_profile.G * body_j.mass.value * inv_r3 * r
+    #             a_j = -unit_profile.G * body_i.mass.value * inv_r3 * r
+
+    #             acc[body_i.name] += a_i
+    #             acc[body_j.name] += a_j
+
+    #             # Potential energy (count each pair once)
+    #             U += -unit_profile.G * body_i.mass.value * body_j.mass.value * inv_r
+    #     return acc, U

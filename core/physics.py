@@ -1,10 +1,11 @@
 """Physics Engine."""
 from __future__ import annotations
-from typing import Literal
 
+import math
 from dataclasses import dataclass
+from typing import Literal, Iterable
 from uuid import uuid4
-from typing import Iterable
+
 
 import numpy as np
 
@@ -37,6 +38,36 @@ class Coordinates:
             z=np.random.uniform(-1, 1)
         )
 
+
+def solve_kepler(M: float, e: float, tol: float = 1e-12, max_iter: int = 50) -> float:
+    """Estimate E in Kepler's equation M = E - e sin E for E (elliptic).
+
+    https://en.wikipedia.org/wiki/Kepler%27s_equation
+    
+    Kepler’s equation links time to position along an elliptical orbit.
+
+    Params
+    -------
+    1. M (mean anomaly) in radians
+    2. e is eccentricity in radians
+    
+    Returns
+    -------
+    E, the eccentric anomaly, which is an angular parameter that defines the
+    position of a body that is moving along an ellipse. It is useful to compute
+    the position of a point moving in a Keplerian orbit.
+    """
+    # initial guess, use E=M if low eccentricity, otherwise pi
+    E = M if e < 0.8 else math.pi
+    # Newton–Raphson iteration
+    for _ in range(max_iter):
+        f = E - e * math.sin(E) - M
+        fp = 1.0 - e * math.cos(E)
+        dE = -f / fp
+        E += dE
+        if abs(dE) < tol:
+            break
+    return E  # radians
 
 def moment_of_inertia(
     mass: float,
@@ -380,7 +411,6 @@ def set_circular_orbit(primary: Object, secondary: Object, plane_normal=np.array
         # Choose another plane if degenerate
         t = np.cross(np.array([0., 1., 0.]), r / R)
     t /= np.linalg.norm(t)
-
 
     # Circular orbital speed for reduced two-body about barycenter:
     v_mag = np.sqrt(unit_profile.G * (primary.mass + secondary.mass) / R)

@@ -8,10 +8,11 @@ from datetime import datetime, timezone, timedelta
 import numpy as np
 from flask import Flask, jsonify, render_template
 
+from core.constants import J2000_JD, JULIAN_DAY
 from core.datasets import solar_system_v2, System
 from core.engine import SimulationEngine, run_simulation
 from core.physics import Object, Coordinates, ObjectCollection
-from core.sol import J2000_JD, JULIAN_DAY
+
 
 
 def generate_solar_system(
@@ -19,7 +20,7 @@ def generate_solar_system(
     max_hist: int = None,
 ):
     """Generate a SimulationEngine with the solar system bodies."""
-    system: System = solar_system_v2(moons=False)
+    system: System = solar_system_v2(moons=True)
     system.standardize_units(
         mass_unit="kilograms",
         distance_unit="meters",
@@ -29,6 +30,10 @@ def generate_solar_system(
     bodies = []
     for body in system:
         r, v = body.get_state()
+        if body.parent is not None:
+            parent_position, parent_velocity = body.parent.get_state()
+            r = np.array(parent_position) + np.array(r)  # Adjust position relative to parent
+            v = np.array(parent_velocity) + np.array(v)  # Adjust velocity relative to parent
         bodies.append(
             Object(
                 mass=body.mass.value,
@@ -44,7 +49,8 @@ def generate_solar_system(
     engine.system = system
     return engine
 
-INTERVAL = 3600.  # 1 hour
+# INTERVAL = 3600.  # 1 hour
+INTERVAL = 1800.  # 1 hour
 INITIAL_STEPS = 5000  # hours to warm up with
 MAX_HISTORY = 50000
 # 1-hour timestep; softening to avoid singularities if needed
