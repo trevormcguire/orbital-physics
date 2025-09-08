@@ -466,16 +466,15 @@ function frameIfNeeded(data) {
 
 /* ------------------------ Data ------------------------ */
 function updateSimTimeFromPayload(payload) {
-  const el = document.getElementById("simTime");
-  if (!el) return;
-  if (payload?.sim_time_iso) {
-    // show ISO and JD (rounded)
-    const jd = payload.sim_time_jd ? ` (JD ${payload.sim_time_jd.toFixed(5)})` : "";
-    el.textContent = `epoch: ${payload.sim_time_iso}${jd}`;
-  } else if (payload?.time_elapsed != null) {
-    const days = (payload.time_elapsed / 86400).toFixed(2);
-    el.textContent = `time elapsed: ${days} d`;
-  }
+  const simTime = document.getElementById("simTime");
+  const timeElapsed = document.getElementById("timeElapsed");
+  if (!simTime | !timeElapsed) return;
+    if (payload?.time_elapsed != null) {
+      const days = (payload.time_elapsed / 86400).toFixed(2);
+      timeElapsed.textContent = `time elapsed: ${days} d`;
+      simTime.textContent = `sim time: ${payload.sim_time_iso}`;
+
+    }
 }
 
 async function fetchState() {
