@@ -1,3 +1,4 @@
+<!-- ...existing code... -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,78 +9,138 @@
     html, body { margin:0; height:100%; background:#fff; overflow:hidden; }
     #scene { width:100vw; height:100vh; display:block; }
 
-    /* Minimal tooltip */
+    /* Minimal tooltip - subtle */
     #tooltip {
       position: fixed;
       top: 0; left: 0;
       transform: translate(-9999px,-9999px);
-      background: #ffffff;
-      color: #000000;
-      border: 1px solid #000;
+      background: rgba(255,255,255,0.96);
+      color: #0b0b0b;
+      border: 1px solid rgba(0,0,0,0.06);
       padding: 6px 8px;
-      font: 14px/1.3 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      font: 13px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
       pointer-events: none;
       white-space: nowrap;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
     }
     #tooltip .name { font-weight: 600; margin-right: 6px; }
     #tooltip .kv { opacity: 0.9; }
 
-    /* Flash button */
-    #flashBtn {
+    /* Combined control panel (top-left) */
+    #controls {
       position: fixed;
       left: 12px;
       top: 12px;
-      z-index: 10;
-      padding: 8px 12px;
-      background: #111;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font: 14px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      box-shadow: 0 2px 6px rgba(66, 65, 65, 0.2);
+      z-index: 11;
+      background: rgba(255,255,255,0.92);
+      border: 1px solid rgba(0,0,0,0.06);
+      padding: 8px;
+      border-radius: 10px;
+      font: 13px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      width: 240px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+    }
+    #controls .header {
+      display:flex;
+      align-items:center;
+      gap:8px;
+      margin-bottom:6px;
+    }
+    #controls .title {
+      font-weight:600;
+      font-size:13px;
+      flex:1;
+    }
+    /* small flash control - subtle */
+    #flashBtn {
+      appearance: none;
+      -webkit-appearance: none;
+      height:28px;
+      width:28px;
+      padding:0;
+      margin:0;
+      border-radius:8px;
+      border: 1px solid rgba(0,0,0,0.06);
+      background: linear-gradient(180deg, rgba(250,250,250,0.98), rgba(240,240,240,0.98));
+      color:#111;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      font-weight:700;
+      font-size:12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.04);
     }
     #flashBtn:active { transform: translateY(1px); }
-  </style>
-  <style>
-    /* Focus selector panel */
-    #focusPanel {
+
+    #controls input[type="search"] {
+      width:100%;
+      box-sizing:border-box;
+      padding:6px 8px;
+      border-radius:8px;
+      border:1px solid rgba(0,0,0,0.06);
+      margin-bottom:6px;
+      background:rgba(255,255,255,0.98);
+    }
+    #controls select {
+      width:100%;
+      box-sizing:border-box;
+      padding:6px 8px;
+      border-radius:8px;
+      border:1px solid rgba(0,0,0,0.06);
+      margin-bottom:6px;
+      background:transparent;
+      font-size:13px;
+    }
+    #controls .clear {
+      width:100%;
+      padding:6px 8px;
+      border-radius:8px;
+      border:none;
+      background: #f5f5f6;
+      cursor:pointer;
+      font-size:13px;
+    }
+
+    /* Sim time (top-right) - compact + monospace for clarity */
+    .time-info {
       position: fixed;
-      left: 12px;
-      top: 56px;
-      z-index: 11;
-      background: rgba(255,255,255,0.95);
-      border: 1px solid #ddd;
-      padding: 8px;
+      right:12px;
+      top:12px;
+      z-index:10;
+      font:12px/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, "Segoe UI Mono", Roboto Mono, monospace;
+      background: rgba(255,255,255,0.92);
+      padding:6px 10px;
+      border-radius:8px;
+      border:1px solid rgba(0,0,0,0.06);
+      color:#222;
+      box-shadow:0 4px 12px rgba(0,0,0,0.04);
+      max-width:260px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+
+    /* Version badge (bottom-right) */
+    #appVersion {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      z-index: 12;
+      font: 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, "Segoe UI Mono", Roboto Mono, monospace;
+      background: rgba(250,250,250,0.9);
+      color: #333;
+      padding: 6px 8px;
       border-radius: 8px;
-      font: 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      width: 220px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+      border: 1px solid rgba(0,0,0,0.04);
+      opacity: 0.92;
+      pointer-events: none; /* not a button */
+      user-select: text;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.04);
     }
-    #focusPanel input[type="search"] {
-      width: 100%;
-      box-sizing: border-box;
-      margin-bottom: 6px;
-      padding: 6px 8px;
-      border-radius: 6px;
-      border: 1px solid #ddd;
-    }
-    #focusPanel select {
-      width: 100%;
-      box-sizing: border-box;
-      padding: 6px 8px;
-      border-radius: 6px;
-      border: 1px solid #ddd;
-      margin-bottom: 6px;
-    }
-    #focusPanel button.clear {
-      width: 100%;
-      padding: 6px 8px;
-      border-radius: 6px;
-      border: none;
-      background: #f5f5f5;
-      cursor: pointer;
-    }
+
+    /* keep existing focus panel visual affordances removed (we use #controls now) */
   </style>
 
   <!-- Three.js (ES Modules) -->
@@ -94,21 +155,35 @@
 </head>
 <body>
   <canvas id="scene"></canvas>
-  <div id="tooltip"></div>
-  <div><button id="flashBtn" title="Flash">Flash</button></div>
-  <!-- Focus selector: search + select + clear -->
-  <div id="focusPanel" aria-hidden="false">
-    <input id="focusSearch" type="search" placeholder="Search bodies..." />
+  <div id="tooltip" aria-hidden="true"></div>
+
+  <!-- Combined control panel -->
+  <div id="controls" role="region" aria-label="Controls">
+    <div class="header">
+      <div class="title">Settings</div>
+      <button id="flashBtn" title="Flash bodies" aria-label="Flash">⚡</button>
+    </div>
+
+    <input id="focusSearch" type="search" placeholder="Search bodies..." aria-label="Search bodies" />
     <select id="focusSelect" size="6" aria-label="Choose body to focus"></select>
     <button class="clear" id="clearFocusBtn" title="Clear focus">Clear focus</button>
   </div>
-  <div id="simTime" style="position:fixed; right:12px; top:12px; z-index:10; font:12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#fff; padding:6px 8px; border-radius:6px; border:1px solid #ddd;"></div>
+
+  <div id="timeInfo" class="time-info" title="Simulation time (UTC)">
+    <div>system: {{ system }}</div>
+    <div id="timeElapsed" title="Time Elapsed (Days)">--</div>
+    <div id="simTime">--</div>
+  </div>
+  <div id="appVersion" aria-hidden="true">v{{ version }}</div>
+
   <script>
     window.__BOOTSTRAP__ = {
       history: {{ initial_state|tojson }},
       snapshot: {{ bodies|tojson }}
     };
   </script>
+
   <script type="module" src="/static/js/main.js"></script>
 </body>
 </html>
+<!-- ...existing code... --
