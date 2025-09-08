@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orbital-sim-deployment
+  namespace: orbital
+  labels:
+    app: orbital-sim
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orbital-sim
+  template:
+    metadata:
+      labels:
+        app: orbital-sim
+    spec:
+      nodeSelector:
+        side: orbital
+      imagePullSecrets:
+      - name: regcred
+      containers:
+      - name: orbital-sim
+        image: trevormcguire/dev:orbital_sim_v0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+        readinessProbe:  # determine if ready to accept traffic
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          failureThreshold: 3
+        livenessProbe:  # determine if container is alive
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          failureThreshold: 3
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orbital-sim-service
+  namespace: orbital
+spec:
+  type: ClusterIP
+  selector:
+    app: orbital-sim
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt-prd
+  namespace: orbital
+spec:
+  acme:
+    # The ACME server URL
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # Email address used for ACME registration
+    email: trevormcguire13@gmail.com
+    # Name of a secret used to store the ACME account private key
+    privateKeySecretRef:
+      name: letsencrypt-prd
+    # Enable the HTTP-01 challenge provider
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: orbital-sim-ingress
+  namespace: orbital
+  annotations:
+    cert-manager.io/issuer: "letsencrypt-prd"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - orbitalphysics.com
+    secretName: orbital-sim-ingress-tls  # cert-manager requests the cert and stores it here.
+  rules:
+  - host: orbitalphysics.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: orbital-sim-service
+            port:
+              number: 80

@@ -159,3 +159,10 @@ def api_state():
     Also returns mass/radius min/max for color/size scaling.
     """
     return jsonify(get_bodies())
+
+
+@app.get("/health")
+def health():
+    """Kubernetes liveness/readiness probe endpoint."""
+    return jsonify(status="ok"), 200
+
