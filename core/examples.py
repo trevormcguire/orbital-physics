@@ -187,7 +187,6 @@ def sol_from_kepler_dataset(
     """Build Sun+planets from core.datasets keplerian table and render a video."""
     import numpy as np
 
-    # from core.datasets import solar_keplerian_elements, solar_physical_properties, solar_system_v2
     from core.body import System
     from core.datasets import solar_system_v2
     from core.physics import Object, Coordinates, ObjectCollection

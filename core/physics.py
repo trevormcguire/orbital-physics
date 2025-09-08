@@ -412,7 +412,6 @@ def set_circular_orbit(primary: Object, secondary: Object, plane_normal=np.array
         t = np.cross(np.array([0., 1., 0.]), r / R)
     t /= np.linalg.norm(t)
 
-
     # Circular orbital speed for reduced two-body about barycenter:
     v_mag = np.sqrt(unit_profile.G * (primary.mass + secondary.mass) / R)
     v2 = v_mag * t
