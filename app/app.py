@@ -1,23 +1,24 @@
 from __future__ import annotations
 
+import json
 import threading
 import time
-import numpy as np
 from datetime import datetime, timezone, timedelta
 
+import numpy as np
 from flask import Flask, jsonify, render_template
 
+from core.datasets import solar_system_v2, System
 from core.engine import SimulationEngine, run_simulation
-from core.sol import J2000_JD, JULIAN_DAY
 from core.physics import Object, Coordinates, ObjectCollection
+from core.sol import J2000_JD, JULIAN_DAY
 
 
-def generate_engine_v3(
+def generate_solar_system(
     dt: float,
     max_hist: int = None,
 ):
-    from core.datasets import solar_system_v2, System
-
+    """Generate a SimulationEngine with the solar system bodies."""
     system: System = solar_system_v2(moons=False)
     system.standardize_units(
         mass_unit="kilograms",
@@ -47,7 +48,7 @@ INTERVAL = 3600.  # 1 hour
 INITIAL_STEPS = 5000  # hours to warm up with
 MAX_HISTORY = 50000
 # 1-hour timestep; softening to avoid singularities if needed
-engine = generate_engine_v3(dt=INTERVAL, max_hist=MAX_HISTORY)  # each frame is 1 hour
+engine = generate_solar_system(dt=INTERVAL, max_hist=MAX_HISTORY)  # each frame is 1 hour
 epoch_ts = (J2000_JD - 2440587.5) * JULIAN_DAY  # seconds since Unix epoch
 engine.sim_epoch = datetime.fromtimestamp(epoch_ts, tz=timezone.utc)
 engine.sim_epoch_jd = float(J2000_JD)
@@ -58,6 +59,8 @@ run_simulation(engine, steps=INITIAL_STEPS, print_every=100)  # 1 month of histo
 print("Done.")
 
 app = Flask(__name__)
+with open("config.json", "r") as f:
+    CONFIG = json.loads(f.read())
 
 AU_METERS = 1.495978707e11
 # WORLD_SCALE = 1.0 / AU_METERS  # world units == AU
@@ -143,7 +146,12 @@ def index():
             x, y, z = p[0], p[1], p[2]
             converted.append([x * WORLD_SCALE, y * WORLD_SCALE, z * WORLD_SCALE])
         world_hist[name] = converted
-    return render_template("index.html", initial_state=world_hist, bodies=get_bodies())
+    return render_template(
+        "index.html",
+        initial_state=world_hist,
+        bodies=get_bodies(),
+        version=CONFIG["version"]
+    )
 
 @app.route("/api/state")
 def api_state():

@@ -30,7 +30,7 @@ spec:
             path: /health
             port: 8000
           initialDelaySeconds: 5
-          periodSeconds: 15
+          periodSeconds: 10
           failureThreshold: 3
         livenessProbe:  # determine if container is alive
           httpGet:
