@@ -8,6 +8,7 @@ RUN pip3 install --no-cache-dir -r requirements-app.txt
 
 COPY core/ core/
 COPY app/ app/
+COPY config.json config.json
 
 # Init Gunicorn https://flask.palletsprojects.com/en/3.0.x/deploying/gunicorn/
 # EXPOSE 8000  # not needed with k8s as we will specify ports there.
