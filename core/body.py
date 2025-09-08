@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 
 from core.constants import STANDARD
+from core.physics import solve_kepler
 from core.units import Unit, Meters, AU, Radians, Degrees, Kilograms, SolarMasses, Seconds, Days
 
 
@@ -172,7 +173,6 @@ class Body:
         with the inertial frame given standard Keplerian elements
         https://en.wikipedia.org/wiki/Kepler%27s_equation
         """
-        from core.sol import solve_kepler
         if self.parent is None:
             return [0., 0., 0.], [0., 0., 0.]  # origin
             # raise ValueError("Cannot compute state for body without parent.")

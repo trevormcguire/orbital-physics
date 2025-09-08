@@ -8,10 +8,11 @@ from datetime import datetime, timezone, timedelta
 import numpy as np
 from flask import Flask, jsonify, render_template
 
+from core.constants import J2000_JD, JULIAN_DAY
 from core.datasets import solar_system_v2, System
 from core.engine import SimulationEngine, run_simulation
 from core.physics import Object, Coordinates, ObjectCollection
-from core.sol import J2000_JD, JULIAN_DAY
+
 
 
 def generate_solar_system(

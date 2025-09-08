@@ -4,6 +4,19 @@ from dataclasses import dataclass
 from enum import Enum
 
 
+AU = 1.495978707e11  # m
+DAY = 86400.  # s
+# The standard celestial coordinate frame:
+# from https://spsweb.fltops.jpl.nasa.gov/portaldataops/mpg/MPG_Docs/MPG%20Book/Release/Chapter7-OrbitalMechanics.pdf:
+#   "it is possible to obtain a standard celestial coordinate frame that is fixed in space
+#    by fixing the orientation of a chosen inertial coordinate frame at a specified instant,
+#    called the standard epoch"
+# The standard epoch is J2000, defined by the positions of the Earth's equator and equinox
+# on Julian Day 2451545.0, or January 1, 2000 at 12:00:00.
+JULIAN_DAY = 86400.  # s
+J2000_JD = 2451545.  # Julian Date of J2000 epoch
+
+
 class UnitSystem(str, Enum):
     ASTRO = "astro"  # AU, M_sun, day
     SI    = "si"  # m, kg, s

@@ -182,73 +182,39 @@ def sol_from_kepler_dataset(
     out_path: str = "sol_from_keplerian.mp4",
     days: int = 365,
     dt: float = None,
-    include_sun: bool = True,
     print_every: int = 100,
 ):
     """Build Sun+planets from core.datasets keplerian table and render a video."""
-    import math
     import numpy as np
 
-    from core.datasets import solar_keplerian_elements, solar_physical_properties
-    from core.sol import OrbitalElements, elements_to_state, G, DAY
+    # from core.datasets import solar_keplerian_elements, solar_physical_properties, solar_system_v2
+    from core.body import System
+    from core.datasets import solar_system_v2
     from core.physics import Object, Coordinates, ObjectCollection
     from core.engine import SimulationEngine, run_simulation
     from core.plot import render_orbital_mp4
 
-    # get dataset and convert to meters/radians (Dataset defaults do this)
-    ds = solar_keplerian_elements().convert_types(angle_unit="radians")
-    rows = ds.values()  # list[dict] with numeric 'a' (m), angles (rad)
+    dt = 86400.0 if dt is None else dt
 
-    phys = solar_physical_properties().convert_types(mass_unit="kilograms", distance_unit="meters").values()
-    phys = {row["name"].lower(): row for row in phys}
-
-    # choose timestep
-    dt = DAY if dt is None else dt
-    mu_sun = G * phys["sun"]["mass"]
-    default_mass = phys["earth"]["mass"]
-    default_radius = phys["earth"]["radius"]
-
+    system: System = solar_system_v2(moons=False)
+    system.standardize_units(
+        mass_unit="kilograms",
+        distance_unit="meters",
+        angle_unit="radians",
+        time_unit="seconds"
+    )
     bodies = []
-    if include_sun:
-        sun = Object(
-            mass=phys["sun"]["mass"],
-            radius=phys["sun"]["radius"],
-            velocity=np.zeros(3),
-            coordinates=Coordinates(0.0, 0.0, 0.0),
-            name="Sol"
-        )
-        bodies.append(sun)
-
-    for rec in rows:
-        name = rec.get("name")
-        a = float(rec["a"])
-        e = float(rec["e"])
-        I = float(rec["I"])
-        L = float(rec["L"])  # mean longitude (defined as L = Ω + ω + M , or L = ϖ + M)
-        varpi = float(rec["long.peri"])  # longitude of periapsis (closest point, defied as ϖ = Ω + ω)
-        O = float(rec["long.node"])  # longitude of ascending node (defied as Ω)
-
-        # Compute mean anomaly and argument of periapsis consistent with core/sol.jpl logic
-        M = (L - varpi) % (2 * math.pi)  # mean anomaly
-        omega = (varpi - O) % (2 * math.pi)  # argument of periapsis (ω)
-
-        el = OrbitalElements(a=a, e=e, i=I, Omega=O, omega=omega, M=M)
-        # radius (dist from foci), velocity in inertial frame
-        r, v = elements_to_state(mu_sun, el)
-
-        mass = phys[name.lower()]["mass"] if name.lower() in phys else default_mass
-        radius = phys[name.lower()]["radius"] if name.lower() in phys else default_radius
-
+    for body in system:
+        r, v = body.get_state()
         bodies.append(
             Object(
-                mass=mass,
-                radius=radius,
-                velocity=v.astype(np.float64),
-                coordinates=Coordinates(*r.tolist()),
-                name=name
+                mass=body.mass.value,
+                radius=body.radius.value,
+                velocity=np.array(v, dtype=np.float64),
+                coordinates=Coordinates(*r),
+                name=body.name
             )
         )
-
     collection = ObjectCollection(bodies)
     engine = SimulationEngine(collection, dt=dt, softening=1e6, restitution=1.0)
 
