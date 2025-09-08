@@ -15,8 +15,9 @@ def solar_system_v2(moons: bool = False, **kwargs):
     earth = Body(parent=sol, name="Earth", mass=Kilograms(5.9722e24), radius=Meters(6.371e6), a=AU(1.00000261), e=0.01671123, I=Degrees(-0.00001531), L=Degrees(100.46457166), long_peri=Degrees(102.93768193), long_node=Degrees(0.0), M=None, arg_peri=None)
     jupiter = Body(parent=sol, name="Jupiter", mass=Kilograms(1.8982e27), radius=Meters(6.9911e7), a=AU(5.20288700), e=0.04838624, I=Degrees(1.30439695), L=Degrees(34.39644051), long_peri=Degrees(14.72847983), long_node=Degrees(100.47390909), M=None, arg_peri=None)
     saturn = Body(parent=sol, name="Saturn", mass=Kilograms(5.6834e26), radius=Meters(5.8232e7), a=AU(9.53667594), e=0.05386179, I=Degrees(2.48599187), L=Degrees(49.95424423), long_peri=Degrees(92.59887831), long_node=Degrees(113.66242448), M=None, arg_peri=None)
-    neptune = Body(parent=sol, name="Neptune", mass=Kilograms(1.02413e26), radius=Meters(2.4622e7), a=AU(30.06992276), e=0.00859048, I=Degrees(1.77004347), L=Degrees(-55.12002969), long_peri=Degrees(44.96476227), long_node=Degrees(131.78422574), M=None, arg_peri=None)
     uranus = Body(parent=sol, name="Uranus", mass=Kilograms(8.6810e25), radius=Meters(2.5362e7), a=AU(19.18916464), e=0.04725744, I=Degrees(0.77263783), L=Degrees(313.23810451), long_peri=Degrees(170.95427630), long_node=Degrees(74.01692503), M=None, arg_peri=None)
+    neptune = Body(parent=sol, name="Neptune", mass=Kilograms(1.02413e26), radius=Meters(2.4622e7), a=AU(30.06992276), e=0.00859048, I=Degrees(1.77004347), L=Degrees(-55.12002969), long_peri=Degrees(44.96476227), long_node=Degrees(131.78422574), M=None, arg_peri=None)
+
     bodies = [
         sol,
         Body(parent=sol, name="Mercury", mass=Kilograms(3.3011e23), radius=Meters(2.4397e6), a=AU(0.38709927), e=0.20563593, I=Degrees(7.00497902), L=Degrees(252.25032350), long_peri=Degrees(77.45779628), long_node=Degrees(48.33076593), M=None, arg_peri=None),
