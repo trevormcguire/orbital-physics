@@ -39,6 +39,9 @@ const TRANSFORM_SMOOTH = 0.18;
 // If no focus body, enable a mild boost when extremely close anyway? (kept off by default)
 const BOOST_WITHOUT_FOCUS = false;
 
+// Hide trails when camera is very close (world units). Tune to taste.
+const TRAIL_HIDE_WORLD_DISTANCE = 20.0;
+
 /* ----------------------- Scene ------------------------ */
 const canvas = document.getElementById("scene");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -46,6 +49,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setClearColor(0xffffff, 1);
 
 const scene = new THREE.Scene();
+// https://threejs.org/docs/#api/en/cameras/PerspectiveCamera
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.01, 1e8);
 camera.up.set(0, 0, 1);
 camera.position.set(0, -40, 24);
@@ -220,6 +224,8 @@ class Body {
     this.trailMaterial = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.18 });
     this.trailLine = new THREE.Line(this.trailGeometry, this.trailMaterial);
     scene.add(this.trailLine);
+    // avoid disappearing due to stale bounding volumes
+    this.trailLine.frustumCulled = true;
 
     // Flash color state
     this._flashTimeout = null;
@@ -234,33 +240,6 @@ class Body {
     this.sprite.scale.set(worldSize, worldSize, 1);
   }
 
-//   setTrailFromHistory(historyArr) {
-//     if (!historyArr || historyArr.length === 0) return;
-//     this.trailMeters.length = 0;
-//     for (let i = 0; i < historyArr.length && this.trailMeters.length < TRAIL_MAX; ++i) {
-//       const e = historyArr[i];
-//       let hx, hy, hz;
-//       if (Array.isArray(e) && e.length >= 3) {
-//         [hx, hy, hz] = e;
-//       } else if (e && typeof e === "object" && "x" in e && "y" in e && "z" in e) {
-//         ({ x: hx, y: hy, z: hz } = e);
-//       } else {
-//         continue;
-//       }
-//       this.trailMeters.push(new THREE.Vector3(hx, hy, hz));
-//     }
-//     if (this.trailMeters.length === 0) return;
-
-//     const last = this.trailMeters[this.trailMeters.length - 1];
-//     this.lastMeters.copy(last);
-//     this._prevMeters.copy(last);
-//     this._nextMeters.copy(last);
-//     this._currMeters.copy(last);
-//     // Immediate projection
-//     const worldPos = metersToWorldVec(last.x, last.y, last.z);
-//     this.sprite.position.copy(worldPos);
-//     this._updateTrailGeometry(); // projects with current transform
-//   }
   setTrailFromHistory(historyArr) {
     if (!historyArr || historyArr.length === 0) return;
     this.trailMeters.length = 0;
@@ -361,10 +340,17 @@ class Body {
       metersToWorldInPlace(this.trailMeters[i], tmp);
       attr.setXYZ(i, tmp.x, tmp.y, tmp.z);
     }
-    // zero remaining
-    for (let i = drawCount; i < TRAIL_MAX; ++i) attr.setXYZ(i, 0, 0, 0);
+    // Zero out remaining points
+    for (let i = drawCount; i < TRAIL_MAX; ++i) {
+        attr.setXYZ(i, 0, 0, 0);
+    }
     attr.needsUpdate = true;
     this.trailGeometry.setDrawRange(0, drawCount);
+    try {
+        this.trailGeometry.computeBoundingSphere();
+    } catch (e) {
+        // ignore errors from degenerate geometry
+    }
     this._lastTrailTransformVersion = transformVersion;
   }
 
@@ -810,7 +796,7 @@ bootstrapInitial = function() {
 const orig_fetchState = fetchState;
 fetchState = async function() {
   await orig_fetchState();
-  rebuildFocusList(focusSearch.value);
+  // rebuildFocusList(focusSearch.value);
 };
 
 /* ----------------------- Render loop ----------------------- */
@@ -856,6 +842,14 @@ function animate() {
   bodies.forEach(b => b.updateLerp(now));
   // If transform changed, re-project trails in one pass
   bodies.forEach(b => b.refreshProjectionIfNeeded());
+  bodies.forEach(b => {
+    try {
+        const d = b.sprite.position.distanceTo(camera.position);
+        b.trailLine.visible = d > TRAIL_HIDE_WORLD_DISTANCE;
+    } catch (e) {
+        // pass
+    }
+   });
 
   controls.update();
   renderer.render(scene, camera);
