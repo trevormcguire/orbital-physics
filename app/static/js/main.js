@@ -810,7 +810,7 @@ bootstrapInitial = function() {
 const orig_fetchState = fetchState;
 fetchState = async function() {
   await orig_fetchState();
-  rebuildFocusList(focusSearch.value);
+  // rebuildFocusList(focusSearch.value);
 };
 
 /* ----------------------- Render loop ----------------------- */
