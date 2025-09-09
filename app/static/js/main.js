@@ -39,6 +39,9 @@ const TRANSFORM_SMOOTH = 0.18;
 // If no focus body, enable a mild boost when extremely close anyway? (kept off by default)
 const BOOST_WITHOUT_FOCUS = false;
 
+// Hide trails when camera is very close (world units). Tune to taste.
+const TRAIL_HIDE_WORLD_DISTANCE = 20.0;
+
 /* ----------------------- Scene ------------------------ */
 const canvas = document.getElementById("scene");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -839,6 +842,14 @@ function animate() {
   bodies.forEach(b => b.updateLerp(now));
   // If transform changed, re-project trails in one pass
   bodies.forEach(b => b.refreshProjectionIfNeeded());
+  bodies.forEach(b => {
+    try {
+        const d = b.sprite.position.distanceTo(camera.position);
+        b.trailLine.visible = d > TRAIL_HIDE_WORLD_DISTANCE;
+    } catch (e) {
+        // pass
+    }
+   });
 
   controls.update();
   renderer.render(scene, camera);
