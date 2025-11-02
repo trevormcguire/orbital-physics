@@ -1,4 +1,6 @@
 """Physics Engine."""
+import json
+
 import numpy as np
 
 from core.physics import Coordinates, ObjectCollection, pairwise_accelerations
@@ -14,16 +16,31 @@ class SimulationEngine:
         softening (float): Softening length to avoid singularities (in meters).
         history (dict): Stores positions of all objects at each step for plotting.
     """
-    def __init__(self, objects: ObjectCollection, dt: float = 1.0, softening: float = 0.0, restitution: float = 1.0, max_hist: int = -1):
+    def __init__(self, objects: ObjectCollection, dt: float = 1.0, softening: float = 0.0, restitution: float = 1.0, max_hist: int = -1, cache: bool = True, cache_fp: str = "history.jsonl"):
         self.objects = objects
         self.dt = float(dt)
         self.softening = float(softening)
         self.restitution = float(restitution)
         self.history = {obj.uuid: [obj.position().copy().tolist()] for obj in self.objects}
         self.max_hist = max_hist
+        self.cache = cache
+        if not cache_fp.endswith(".jsonl"):
+            raise ValueError("cache_fp must end with .jsonl")
+        self.cache_fp = cache_fp
         # initial accelerations
         self.acc, self.last_potential = pairwise_accelerations(self.objects.objects, eps=self.softening)
         self.time_elapsed = float(dt)
+    
+    def save_frame(self):
+        """Save the current state to a JSON file."""
+        state = {
+            "time_elapsed": self.time_elapsed,
+            "objects": self.objects.to_dict(),
+            "history": self.named_history(limit=1),  # only latest position
+        }
+        with open(self.cache_fp, "a") as f:
+            json.dump(state, f)
+            f.write('\n')
 
     def named_history(self, limit: int = 0):
         """Return history with object names as keys instead of UUIDs."""
@@ -59,6 +76,8 @@ class SimulationEngine:
             self.history[obj.uuid].append(obj.position().copy().tolist())
             if use_queue and (len(self.history[obj.uuid]) > self.max_hist):
                 self.history[obj.uuid].pop(0)
+        if self.cache:
+            self.save_frame()
 
         self.time_elapsed += dt
 

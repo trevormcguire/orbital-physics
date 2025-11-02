@@ -1,6 +1,7 @@
 """Physics Engine."""
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass
 from typing import Literal, Iterable
@@ -200,6 +201,32 @@ class Object:
             "uuid": self.uuid,
             "unit_profile": self.unit_profile.name.value,
         }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> Object:
+        unit_profile = STANDARD if data.get("unit_profile", "si") == "si" else None
+        if data.get("unit_profile", "si") == "astro":
+            unit_profile = UnitProfile(
+                name="astro",
+                G=0.0002959122082855911,
+                distance_unit="AU",
+                mass_unit="M_sun",
+                time_unit="day",
+                AU=1.0,
+                M_SUN=1.0,
+                DAY=1.0,
+            )
+        return cls(
+            mass=data["mass"],
+            radius=data["radius"],
+            coordinates=Coordinates.from_iterable([data["coordinates"]["x"], data["coordinates"]["y"], data["coordinates"]["z"]]),
+            velocity=np.array(data["velocity"]),
+            moi=data.get("moi"),
+            angular_velocity=np.array(data.get("angular_velocity", [0.0, 0.0, 0.0])),
+            uuid=data.get("uuid"),
+            unit_profile=unit_profile,
+            name=data.get("name"),
+        )
 
     def set_unit_profile(self, unit_profile: UnitProfile):
         self.unit_profile = unit_profile
@@ -430,7 +457,15 @@ class ObjectCollection(object):
     """
     def __init__(self, objects: list[Object]):
         self.objects = objects
+
+    def to_dict(self):
+        return [obj.to_dict() for obj in self.objects]
     
+    @classmethod
+    def from_dict(cls, data: list[dict]) -> ObjectCollection:
+        objects = [Object.from_dict(obj_data) for obj_data in data]
+        return cls(objects)
+
     def __len__(self):
         return len(self.objects)
 
