@@ -1,3 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: orbital-sim-cache-pvc
+  namespace: orbital
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,16 +27,35 @@ spec:
       labels:
         app: orbital-sim
     spec:
+      securityContext:  # allows permission to pvc directory
+        runAsUser: 1001
+        fsGroup: 1001
       nodeSelector:
         side: orbital
       imagePullSecrets:
       - name: regcred
+      volumes:
+      - name: history-cache
+        persistentVolumeClaim:
+          claimName: orbital-sim-cache-pvc
       containers:
       - name: orbital-sim
-        image: trevormcguire/dev:orbital_sim_v0
+        image: trevormcguire/dev:orbital_sim_v1
         imagePullPolicy: Always
         ports:
         - containerPort: 8000
+        env:
+        - name: CACHE_FP
+          value: /data/history.jsonl
+        - name: SIM_INTERVAL
+          value: "1800"
+        - name: SIM_INITIAL_STEPS
+          value: "5000"
+        - name: SIM_MAX_HISTORY
+          value: "7000"
+        volumeMounts:
+        - name: history-cache
+          mountPath: /data
         readinessProbe:  # determine if ready to accept traffic
           httpGet:
             path: /health

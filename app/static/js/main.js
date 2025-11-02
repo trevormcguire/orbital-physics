@@ -696,24 +696,67 @@ const focusSelect = document.getElementById("focusSelect");
 const focusSearch = document.getElementById("focusSearch");
 const clearFocusBtn = document.getElementById("clearFocusBtn");
 
+// function rebuildFocusList(filter = "") {
+//   const list = Array.from(bodies.values()).sort((a, b) => a.name.localeCompare(b.name));
+//   const f = filter.trim().toLowerCase();
+//   focusSelect.innerHTML = "";
+//   for (const b of list) {
+//     if (f && !b.name.toLowerCase().includes(f)) continue;
+//     const opt = document.createElement("option");
+//     opt.value = b.id;
+//     opt.textContent = b.name;
+//     focusSelect.appendChild(opt);
+//   }
+//   // keep select synced with current focus
+//   if (focusBodyId) {
+//     focusSelect.value = focusBodyId;
+//   } else {
+//     focusSelect.selectedIndex = -1;
+//   }
+// }
 function rebuildFocusList(filter = "") {
-  const list = Array.from(bodies.values()).sort((a, b) => a.name.localeCompare(b.name));
+  const sortMethod = document.getElementById("sortSelect")?.value || "name";
+  const list = Array.from(bodies.values());
+
+  // Apply filtering
   const f = filter.trim().toLowerCase();
+  const filteredList = f ? list.filter(b => b.name.toLowerCase().includes(f)) : list;
+
+  // Apply sorting
+  filteredList.sort((a, b) => {
+    if (sortMethod === "proximity") {
+      const distA = a.lastMeters.distanceTo(sceneCenter);
+      const distB = b.lastMeters.distanceTo(sceneCenter);
+      return distA - distB;
+    } else if (sortMethod === "radius") {
+      return b.radiusKm - a.radiusKm; // Descending order by radius
+    } else {
+      return a.name.localeCompare(b.name); // Default: alphabetical by name
+    }
+  });
+
+  // Populate the dropdown
+  const focusSelect = document.getElementById("focusSelect");
   focusSelect.innerHTML = "";
-  for (const b of list) {
-    if (f && !b.name.toLowerCase().includes(f)) continue;
+  for (const b of filteredList) {
     const opt = document.createElement("option");
     opt.value = b.id;
     opt.textContent = b.name;
     focusSelect.appendChild(opt);
   }
-  // keep select synced with current focus
+
+  // Keep the dropdown synced with the current focus
   if (focusBodyId) {
     focusSelect.value = focusBodyId;
   } else {
     focusSelect.selectedIndex = -1;
   }
 }
+
+// Add event listener for the sorting dropdown
+document.getElementById("sortSelect").addEventListener("change", () => {
+  rebuildFocusList(document.getElementById("focusSearch").value);
+});
 
 focusSelect.addEventListener("change", () => {
   const id = focusSelect.value || null;
