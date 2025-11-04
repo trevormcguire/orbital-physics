@@ -34,12 +34,13 @@ class SimulationEngine:
         self.history = {obj.uuid: [obj.position().copy().tolist()] for obj in self.objects}
         self.max_hist = max_hist
         self.cache = cache
-        if not cache_fp.endswith(".jsonl"):
+        if cache_fp and not cache_fp.endswith(".jsonl"):
             raise ValueError("cache_fp must end with .jsonl")
         self.cache_fp = cache_fp
         # initial accelerations
         self.acc, self.last_potential = pairwise_accelerations(self.objects.objects, eps=self.softening)
-        self.time_elapsed = float(dt)  # 0.0 ?
+        # self.time_elapsed = float(dt)  # 0.0 ?
+        self.time_elapsed = 0.
         # throttle cache writes
         self.step_idx = 0
         self.cache_every_n = cache_every_n if self.cache else 0
@@ -118,14 +119,6 @@ class SimulationEngine:
             L += np.cross(r, p)
             # add spin angular momentum if modeling rigid bodies: L += I·ω in body frame
         return L
-    
-    # def save_state(self) -> dict:
-    #     """Return a JSON-serializable snapshot of the current state."""
-    #     return {
-    #         "time_elapsed": self.time_elapsed,
-    #         "objects": [obj.to_dict() for obj in self.objects],
-    #         "history": self.named_history(limit=1),  # only latest position
-    #     }
 
 
 def run_simulation(engine: SimulationEngine, steps: int, print_every: int = 100):

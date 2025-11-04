@@ -19,6 +19,7 @@ from core.physics import Object, Coordinates, ObjectCollection
 def generate_solar_system(
     dt: float,
     max_hist: int = None,
+    use_cache: bool = False,
     cache_fp: str = "solar_system_cache.jsonl",
     cache_every_n: int = 600,
 ):
@@ -53,7 +54,7 @@ def generate_solar_system(
         softening=1e6,
         restitution=1.0,
         max_hist=max_hist,
-        cache=True,
+        cache=use_cache,
         cache_fp=cache_fp,
         cache_every_n=cache_every_n
     )
@@ -68,14 +69,17 @@ with open("config.json", "r") as f:
 INTERVAL = float(os.getenv("SIM_INTERVAL", 1800.))  # default 1 hour
 INITIAL_STEPS = int(os.getenv("SIM_INITIAL_STEPS", 5000))  # hours to warm up with
 MAX_HISTORY = int(os.getenv("SIM_MAX_HISTORY", 7000))
+USE_CACHE = os.getenv("USE_CACHE", "false").lower() == "true"
 CACHE_FP = os.getenv("CACHE_FP")
-if CACHE_FP is None:
-    raise EnvironmentError("CACHE_FP environment variable not set")
+# if CACHE_FP is None:
+#     raise EnvironmentError("CACHE_FP environment variable not set")
 CACHE_EVERY_N = int(os.getenv("CACHE_EVERY_N", "600"))  # ~once/min at 10 Hz
+
 # build engine
 engine = generate_solar_system(
     dt=INTERVAL,
     max_hist=MAX_HISTORY,
+    use_cache=USE_CACHE,
     cache_fp=CACHE_FP,
     cache_every_n=CACHE_EVERY_N
 )  # each frame is 1 hour
