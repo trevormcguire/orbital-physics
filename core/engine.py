@@ -16,7 +16,17 @@ class SimulationEngine:
         softening (float): Softening length to avoid singularities (in meters).
         history (dict): Stores positions of all objects at each step for plotting.
     """
-    def __init__(self, objects: ObjectCollection, dt: float = 1.0, softening: float = 0.0, restitution: float = 1.0, max_hist: int = -1, cache: bool = True, cache_fp: str = "history.jsonl"):
+    def __init__(
+        self,
+        objects: ObjectCollection,
+        dt: float = 1.0,
+        softening: float = 0.0,
+        restitution: float = 1.0,
+        max_hist: int = -1,
+        cache: bool = True,
+        cache_fp: str = "history.jsonl",
+        cache_every_n: int = 300
+    ):
         self.objects = objects
         self.dt = float(dt)
         self.softening = float(softening)
@@ -24,12 +34,16 @@ class SimulationEngine:
         self.history = {obj.uuid: [obj.position().copy().tolist()] for obj in self.objects}
         self.max_hist = max_hist
         self.cache = cache
-        if not cache_fp.endswith(".jsonl"):
+        if cache_fp and not cache_fp.endswith(".jsonl"):
             raise ValueError("cache_fp must end with .jsonl")
         self.cache_fp = cache_fp
         # initial accelerations
         self.acc, self.last_potential = pairwise_accelerations(self.objects.objects, eps=self.softening)
-        self.time_elapsed = float(dt)
+        # self.time_elapsed = float(dt)  # 0.0 ?
+        self.time_elapsed = 0.
+        # throttle cache writes
+        self.step_idx = 0
+        self.cache_every_n = cache_every_n if self.cache else 0
     
     def save_frame(self):
         """Save the current state to a JSON file."""
@@ -70,15 +84,16 @@ class SimulationEngine:
         # Collisions (after completing the symplectic step)
         self.objects.handle_collisions(restitution=self.restitution)
 
-        # Record
+        # cache history
         use_queue = self.max_hist is not None
         for obj in self.objects:
             self.history[obj.uuid].append(obj.position().copy().tolist())
             if use_queue and (len(self.history[obj.uuid]) > self.max_hist):
                 self.history[obj.uuid].pop(0)
-        if self.cache:
+        # throttled cache write
+        if self.cache and ((self.step_idx % self.cache_every_n) == 0):
             self.save_frame()
-
+        self.step_idx += 1
         self.time_elapsed += dt
 
     def run(self, steps: int):
@@ -104,14 +119,6 @@ class SimulationEngine:
             L += np.cross(r, p)
             # add spin angular momentum if modeling rigid bodies: L += I·ω in body frame
         return L
-    
-    # def save_state(self) -> dict:
-    #     """Return a JSON-serializable snapshot of the current state."""
-    #     return {
-    #         "time_elapsed": self.time_elapsed,
-    #         "objects": [obj.to_dict() for obj in self.objects],
-    #         "history": self.named_history(limit=1),  # only latest position
-    #     }
 
 
 def run_simulation(engine: SimulationEngine, steps: int, print_every: int = 100):

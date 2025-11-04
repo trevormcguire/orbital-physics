@@ -1,14 +1,14 @@
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: orbital-sim-cache-pvc
-  namespace: orbital
-spec:
-  accessModes:
-  - ReadWriteOnce
-  resources:
-    requests:
-      storage: 100Gi
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: orbital-sim-cache-pvc
+#   namespace: orbital
+# spec:
+#   accessModes:
+#   - ReadWriteOnce
+#   resources:
+#     requests:
+#       storage: 50Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -34,10 +34,10 @@ spec:
         side: orbital
       imagePullSecrets:
       - name: regcred
-      volumes:
-      - name: history-cache
-        persistentVolumeClaim:
-          claimName: orbital-sim-cache-pvc
+      # volumes:
+      # - name: history-cache
+      #   persistentVolumeClaim:
+      #     claimName: orbital-sim-cache-pvc
       containers:
       - name: orbital-sim
         image: trevormcguire/dev:orbital_sim_v1
@@ -45,23 +45,24 @@ spec:
         ports:
         - containerPort: 8000
         env:
-        - name: CACHE_FP
-          value: /data/history.jsonl
         - name: SIM_INTERVAL
           value: "1800"
         - name: SIM_INITIAL_STEPS
           value: "5000"
         - name: SIM_MAX_HISTORY
           value: "7000"
-        volumeMounts:
-        - name: history-cache
-          mountPath: /data
+        # - name: CACHE_FP
+        #   value: /data/history.jsonl
+        # volumeMounts:
+        # - name: history-cache
+        #   mountPath: /data
         readinessProbe:  # determine if ready to accept traffic
           httpGet:
             path: /health
             port: 8000
           initialDelaySeconds: 5
           periodSeconds: 10
+          timeoutSeconds: 5
           failureThreshold: 3
         livenessProbe:  # determine if container is alive
           httpGet:
@@ -69,6 +70,7 @@ spec:
             port: 8000
           initialDelaySeconds: 15
           periodSeconds: 30
+          timeoutSeconds: 5
           failureThreshold: 3
         securityContext:
           runAsNonRoot: true

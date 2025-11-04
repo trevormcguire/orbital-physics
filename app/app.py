@@ -19,7 +19,9 @@ from core.physics import Object, Coordinates, ObjectCollection
 def generate_solar_system(
     dt: float,
     max_hist: int = None,
+    use_cache: bool = False,
     cache_fp: str = "solar_system_cache.jsonl",
+    cache_every_n: int = 600,
 ):
     """Generate a SimulationEngine with the solar system bodies."""
     system: System = solar_system_v2(moons=True)
@@ -52,8 +54,9 @@ def generate_solar_system(
         softening=1e6,
         restitution=1.0,
         max_hist=max_hist,
-        cache=True,
+        cache=use_cache,
         cache_fp=cache_fp,
+        cache_every_n=cache_every_n
     )
     engine.body_map = {b.name: b for b in system.bodies}
     engine.system = system
@@ -66,11 +69,20 @@ with open("config.json", "r") as f:
 INTERVAL = float(os.getenv("SIM_INTERVAL", 1800.))  # default 1 hour
 INITIAL_STEPS = int(os.getenv("SIM_INITIAL_STEPS", 5000))  # hours to warm up with
 MAX_HISTORY = int(os.getenv("SIM_MAX_HISTORY", 7000))
+USE_CACHE = os.getenv("USE_CACHE", "false").lower() == "true"
 CACHE_FP = os.getenv("CACHE_FP")
-if CACHE_FP is None:
-    raise EnvironmentError("CACHE_FP environment variable not set")
-# 1-hour timestep; softening to avoid singularities if needed
-engine = generate_solar_system(dt=INTERVAL, max_hist=MAX_HISTORY, cache_fp=CACHE_FP)  # each frame is 1 hour
+# if CACHE_FP is None:
+#     raise EnvironmentError("CACHE_FP environment variable not set")
+CACHE_EVERY_N = int(os.getenv("CACHE_EVERY_N", "600"))  # ~once/min at 10 Hz
+
+# build engine
+engine = generate_solar_system(
+    dt=INTERVAL,
+    max_hist=MAX_HISTORY,
+    use_cache=USE_CACHE,
+    cache_fp=CACHE_FP,
+    cache_every_n=CACHE_EVERY_N
+)  # each frame is 1 hour
 epoch_ts = (J2000_JD - 2440587.5) * JULIAN_DAY  # seconds since Unix epoch
 engine.sim_epoch = datetime.fromtimestamp(epoch_ts, tz=timezone.utc)
 engine.sim_epoch_jd = float(J2000_JD)
